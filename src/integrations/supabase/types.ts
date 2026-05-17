@@ -14,16 +14,217 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assets: {
+        Row: {
+          asset_class: string
+          created_at: string
+          current_price: number
+          daily_change_percent: number
+          id: string
+          name: string
+          ticker: string
+        }
+        Insert: {
+          asset_class: string
+          created_at?: string
+          current_price: number
+          daily_change_percent?: number
+          id?: string
+          name: string
+          ticker: string
+        }
+        Update: {
+          asset_class?: string
+          created_at?: string
+          current_price?: number
+          daily_change_percent?: number
+          id?: string
+          name?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
+      complaints: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          message: string
+          name: string
+          status: string
+          subject: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          name: string
+          status?: string
+          subject: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          name?: string
+          status?: string
+          subject?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          account_balance: number
+          available_cash: number
+          avatar_url: string | null
+          chart_mode: string
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          account_balance?: number
+          available_cash?: number
+          avatar_url?: string | null
+          chart_mode?: string
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          account_balance?: number
+          available_cash?: number
+          avatar_url?: string | null
+          chart_mode?: string
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          asset_id: string | null
+          asset_name: string | null
+          created_at: string
+          id: string
+          quantity: number | null
+          status: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          asset_id?: string | null
+          asset_name?: string | null
+          created_at?: string
+          id?: string
+          quantity?: number | null
+          status?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          asset_id?: string | null
+          asset_name?: string | null
+          created_at?: string
+          id?: string
+          quantity?: number | null
+          status?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_investments: {
+        Row: {
+          asset_id: string
+          average_buy_price: number
+          created_at: string
+          id: string
+          quantity: number
+          user_id: string
+        }
+        Insert: {
+          asset_id: string
+          average_buy_price: number
+          created_at?: string
+          id?: string
+          quantity: number
+          user_id: string
+        }
+        Update: {
+          asset_id?: string
+          average_buy_price?: number
+          created_at?: string
+          id?: string
+          quantity?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_investments_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +351,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
