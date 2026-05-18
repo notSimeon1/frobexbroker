@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       assets: {
         Row: {
           asset_class: string
@@ -77,12 +95,50 @@ export type Database = {
         }
         Relationships: []
       }
+      deposits: {
+        Row: {
+          admin_note: string | null
+          amount: number
+          created_at: string
+          crypto_currency: string
+          id: string
+          reviewed_at: string | null
+          status: string
+          tx_hash: string | null
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          amount: number
+          created_at?: string
+          crypto_currency?: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          amount?: number
+          created_at?: string
+          crypto_currency?: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          tx_hash?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_balance: number
           available_cash: number
           avatar_url: string | null
+          chart_intensity: number
           chart_mode: string
+          chart_seed: number
           created_at: string
           full_name: string | null
           id: string
@@ -92,7 +148,9 @@ export type Database = {
           account_balance?: number
           available_cash?: number
           avatar_url?: string | null
+          chart_intensity?: number
           chart_mode?: string
+          chart_seed?: number
           created_at?: string
           full_name?: string | null
           id: string
@@ -102,7 +160,9 @@ export type Database = {
           account_balance?: number
           available_cash?: number
           avatar_url?: string | null
+          chart_intensity?: number
           chart_mode?: string
+          chart_seed?: number
           created_at?: string
           full_name?: string | null
           id?: string
@@ -207,6 +267,42 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      withdrawals: {
+        Row: {
+          admin_note: string | null
+          amount: number
+          created_at: string
+          crypto_currency: string
+          id: string
+          reviewed_at: string | null
+          status: string
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          admin_note?: string | null
+          amount: number
+          created_at?: string
+          crypto_currency?: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          admin_note?: string | null
+          amount?: number
+          created_at?: string
+          crypto_currency?: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          user_id?: string
+          wallet_address?: string
         }
         Relationships: []
       }
