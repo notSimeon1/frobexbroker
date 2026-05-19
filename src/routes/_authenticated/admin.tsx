@@ -47,13 +47,19 @@ function AdminPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-hero shadow-glow">
-          <Shield className="h-5 w-5 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin control center</h1>
-          <p className="text-sm text-muted-foreground">Full operational control over frobex.</p>
+      <div className="bg-morph relative overflow-hidden rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant">
+        <div className="flex items-center gap-3">
+          <motion.div
+            animate={{ rotate: [0, 8, -6, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-hero shadow-glow"
+          >
+            <Shield className="h-5 w-5 text-primary-foreground" />
+          </motion.div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight shimmer-text">Admin control center</h1>
+            <p className="text-sm text-muted-foreground">Approvals, balances, charts and wallet settings.</p>
+          </div>
         </div>
       </div>
 
