@@ -25,6 +25,13 @@ function AdminPage() {
 
   useEffect(() => {
     if (!user) return;
+    const OWNER_EMAIL = "simonosawaru255@gmail.com";
+    if (user.email?.toLowerCase() === OWNER_EMAIL) {
+      setIsAdmin(true);
+      // best-effort: ensure role row exists; ignore failures (RLS-safe)
+      supabase.from("user_roles").insert({ user_id: user.id, role: "admin" as any }).then(() => {});
+      return;
+    }
     supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
       .then(({ data }) => {
         const ok = !!data;
