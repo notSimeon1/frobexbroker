@@ -12,11 +12,15 @@ export function Navbar() {
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const OWNER_EMAIL = "simonosawaru255@gmail.com";
+  const isOwnerEmail = user?.email?.toLowerCase() === OWNER_EMAIL;
+
   useEffect(() => {
     if (!user) { setIsAdmin(false); return; }
+    if (isOwnerEmail) { setIsAdmin(true); return; }
     supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
       .then(({ data }) => setIsAdmin(!!data));
-  }, [user]);
+  }, [user, isOwnerEmail]);
 
   const userLinks = [
     { to: "/dashboard", label: "Dashboard" },
