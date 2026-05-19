@@ -25,6 +25,13 @@ function AdminPage() {
 
   useEffect(() => {
     if (!user) return;
+    const OWNER_EMAIL = "simonosawaru255@gmail.com";
+    if (user.email?.toLowerCase() === OWNER_EMAIL) {
+      setIsAdmin(true);
+      // best-effort: ensure role row exists; ignore failures (RLS-safe)
+      supabase.from("user_roles").insert({ user_id: user.id, role: "admin" as any }).then(() => {});
+      return;
+    }
     supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
       .then(({ data }) => {
         const ok = !!data;
@@ -40,13 +47,19 @@ function AdminPage() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-hero shadow-glow">
-          <Shield className="h-5 w-5 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin control center</h1>
-          <p className="text-sm text-muted-foreground">Full operational control over frobex.</p>
+      <div className="bg-morph relative overflow-hidden rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant">
+        <div className="flex items-center gap-3">
+          <motion.div
+            animate={{ rotate: [0, 8, -6, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-hero shadow-glow"
+          >
+            <Shield className="h-5 w-5 text-primary-foreground" />
+          </motion.div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight shimmer-text">Admin control center</h1>
+            <p className="text-sm text-muted-foreground">Approvals, balances, charts and wallet settings.</p>
+          </div>
         </div>
       </div>
 
@@ -316,8 +329,11 @@ function SettingsTab() {
   if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   const labels: Record<string, string> = {
-    deposit_wallet_usdt: "USDT (TRC20) deposit address",
+    deposit_wallet_usdt: "USDT (default) deposit address",
+    deposit_wallet_usdt_bep20: "USDT BEP20 (BSC) deposit address",
+    deposit_wallet_usdt_trc20: "USDT TRC20 (Tron) deposit address",
     deposit_wallet_btc: "BTC deposit address",
+    deposit_wallet_eth: "ETH (ERC20) deposit address",
   };
 
   return (

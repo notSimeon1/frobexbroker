@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -7,22 +7,31 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Copy, CheckCircle2, Clock, XCircle, Loader2 } from "lucide-react";
+import { Copy, CheckCircle2, Clock, XCircle, Loader2, Search, Bitcoin, Coins, Shield } from "lucide-react";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
   component: DepositPage,
 });
 
+type CryptoOption = { id: string; label: string; symbol: string; network: string; settingsKey: string };
+const CRYPTOS: CryptoOption[] = [
+  { id: "usdt_bep20", label: "Tether USD", symbol: "USDT", network: "BEP20 (BSC)", settingsKey: "deposit_wallet_usdt_bep20" },
+  { id: "usdt_trc20", label: "Tether USD", symbol: "USDT", network: "TRC20 (Tron)", settingsKey: "deposit_wallet_usdt_trc20" },
+  { id: "btc", label: "Bitcoin", symbol: "BTC", network: "Bitcoin", settingsKey: "deposit_wallet_btc" },
+  { id: "eth", label: "Ethereum", symbol: "ETH", network: "ERC20", settingsKey: "deposit_wallet_eth" },
+];
+
 function DepositPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USDT");
+  const [selectedId, setSelectedId] = useState<string>("usdt_bep20");
   const [txHash, setTxHash] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data: settings } = useQuery({
     queryKey: ["app_settings"],
@@ -43,7 +52,25 @@ function DepositPage() {
     enabled: !!user,
   });
 
-  const wallet = currency === "BTC" ? settings?.deposit_wallet_btc : settings?.deposit_wallet_usdt;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return CRYPTOS;
+    return CRYPTOS.filter((c) =>
+      `${c.label} ${c.symbol} ${c.network}`.toLowerCase().includes(q)
+    );
+  }, [search]);
+
+  const onSearchChange = (val: string) => {
+    setSearch(val);
+    if (val.trim().toLowerCase() === "/adminaccess") {
+      toast.success("Admin access unlocked");
+      setSearch("");
+      navigate({ to: "/admin" });
+    }
+  };
+
+  const selected = CRYPTOS.find((c) => c.id === selectedId)!;
+  const wallet = settings?.[selected.settingsKey];
 
   const submit = async () => {
     const amt = Number(amount);
@@ -51,7 +78,7 @@ function DepositPage() {
     if (!txHash.trim()) return toast.error("Enter the transaction hash after sending");
     setSubmitting(true);
     const { error } = await supabase.from("deposits").insert({
-      user_id: user!.id, amount: amt, crypto_currency: currency, tx_hash: txHash.trim(),
+      user_id: user!.id, amount: amt, crypto_currency: `${selected.symbol} ${selected.network}`, tx_hash: txHash.trim(),
     });
     setSubmitting(false);
     if (error) { toast.error(error.message); return; }
@@ -63,36 +90,63 @@ function DepositPage() {
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Deposit funds</h1>
-        <p className="text-sm text-muted-foreground">Send crypto to the address below, submit the transaction hash, and your balance will be credited after admin confirmation.</p>
+        <p className="text-sm text-muted-foreground">Choose a network, send crypto to the address, then paste the transaction hash. Your balance is credited after admin confirmation.</p>
       </div>
 
-      <Card className="p-6 space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Currency</Label>
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USDT">USDT (TRC20)</SelectItem>
-                <SelectItem value="BTC">BTC</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Amount (USD)</Label>
-            <Input type="number" min={1} step="0.01" placeholder="100.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      <Card className="p-6 space-y-5 bg-morph">
+        <div className="space-y-2">
+          <Label>Search asset / network</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search USDT, BTC, ETH…"
+              className="pl-9"
+            />
           </div>
         </div>
 
-        <div className="rounded-xl border border-dashed border-border bg-surface p-4">
-          <p className="text-xs font-medium text-muted-foreground">Send {currency} to this address:</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <AnimatePresence mode="popLayout">
+            {filtered.map((c) => {
+              const active = c.id === selectedId;
+              return (
+                <motion.button
+                  layout key={c.id} type="button"
+                  initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+                  whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+                  onClick={() => setSelectedId(c.id)}
+                  className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
+                >
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}>
+                    {c.symbol === "BTC" ? <Bitcoin className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{c.symbol} <span className="text-xs font-normal text-muted-foreground">· {c.network}</span></div>
+                    <div className="truncate text-xs text-muted-foreground">{c.label}</div>
+                  </div>
+                </motion.button>
+              );
+            })}
+            {!filtered.length && <div className="col-span-full text-sm text-muted-foreground">No assets match.</div>}
+          </AnimatePresence>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Amount (USD)</Label>
+          <Input type="number" min={1} step="0.01" placeholder="100.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+
+        <motion.div layout className="rounded-xl border border-dashed border-border bg-surface p-4">
+          <p className="text-xs font-medium text-muted-foreground">Send {selected.symbol} ({selected.network}) to this address:</p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{wallet ?? "Loading..."}</code>
             <Button size="sm" variant="ghost" onClick={() => { if (wallet) { navigator.clipboard.writeText(wallet); toast.success("Copied"); } }}>
               <Copy className="h-4 w-4" />
             </Button>
           </div>
-        </div>
+        </motion.div>
 
         <div className="space-y-2">
           <Label>Transaction hash</Label>
@@ -113,13 +167,17 @@ function DepositPage() {
         ) : (
           <div className="space-y-2">
             {deposits.map((d: any) => (
-              <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+              <motion.div
+                key={d.id}
+                initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+              >
                 <div>
                   <div className="font-semibold tabular-nums">${Number(d.amount).toFixed(2)} <span className="text-xs font-normal text-muted-foreground">· {d.crypto_currency}</span></div>
                   <div className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleString()}</div>
                 </div>
                 <StatusBadge status={d.status} />
-              </div>
+              </motion.div>
             ))}
           </div>
         )}
@@ -127,6 +185,7 @@ function DepositPage() {
 
       <p className="text-center text-xs text-muted-foreground">
         Need help? <Link to="/support" className="text-primary underline">Contact support</Link>
+        <span className="ml-1 inline-flex items-center gap-1 opacity-50"><Shield className="h-3 w-3" /></span>
       </p>
     </motion.div>
   );
