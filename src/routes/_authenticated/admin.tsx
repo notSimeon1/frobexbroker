@@ -329,8 +329,11 @@ function SettingsTab() {
   if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   const labels: Record<string, string> = {
-    deposit_wallet_usdt: "USDT (TRC20) deposit address",
+    deposit_wallet_usdt: "USDT (default) deposit address",
+    deposit_wallet_usdt_bep20: "USDT BEP20 (BSC) deposit address",
+    deposit_wallet_usdt_trc20: "USDT TRC20 (Tron) deposit address",
     deposit_wallet_btc: "BTC deposit address",
+    deposit_wallet_eth: "ETH (ERC20) deposit address",
   };
 
   return (
