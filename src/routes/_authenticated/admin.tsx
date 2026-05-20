@@ -175,32 +175,34 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
   );
 }
 
-function UserRow({ user, onChange }: { user: any; onChange: () => void }) {
+function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
+  const saveUserChart = useServerFn(updateAdminChart);
+  const adjustBalance = useServerFn(adjustAdminBalance);
   const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
 
   const saveChart = async () => {
-    const { error } = await supabase.from("profiles").update({
-      chart_mode: mode, chart_intensity: Number(intensity) || 1, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString(),
-    }).eq("id", user.id);
-    if (error) return toast.error(error.message);
-    toast.success("Chart updated"); onChange();
+    try {
+      await saveUserChart({ data: { userId: user.id, mode: mode as "profit" | "loss" | "flat", intensity: Number(intensity) || 1 } });
+      toast.success("Chart updated");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update chart");
+    }
   };
 
   const creditProfit = async (sign: 1 | -1) => {
-    const amt = Number(creditAmt) * sign;
-    if (!amt) return toast.error("Enter amount");
-    const { data: p } = await supabase.from("profiles").select("account_balance, available_cash").eq("id", user.id).maybeSingle();
-    const newBal = Number(p?.account_balance ?? 0) + amt;
-    const newCash = Number(p?.available_cash ?? 0) + amt;
-    if (newCash < 0 || newBal < 0) return toast.error("Would go negative");
-    await supabase.from("profiles").update({ account_balance: newBal, available_cash: newCash, updated_at: new Date().toISOString() }).eq("id", user.id);
-    await supabase.from("transactions").insert({
-      user_id: user.id, type: sign > 0 ? "profit_credit" : "loss_debit", amount: Math.abs(amt), asset_name: sign > 0 ? "Profit credit" : "Loss adjustment", status: "completed",
-    });
-    toast.success(`${sign > 0 ? "Credited" : "Debited"} $${Math.abs(amt).toFixed(2)}`);
-    setCreditAmt(""); onChange();
+    const amt = Number(creditAmt);
+    if (!amt || amt <= 0) return toast.error("Enter amount");
+    try {
+      await adjustBalance({ data: { userId: user.id, amount: amt, direction: sign > 0 ? "credit" : "debit" } });
+      toast.success(`${sign > 0 ? "Credited" : "Debited"} $${amt.toFixed(2)}`);
+      setCreditAmt("");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not adjust balance");
+    }
   };
 
   return (
@@ -208,7 +210,7 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-semibold">{user.full_name ?? "—"}</div>
-          <div className="text-xs text-muted-foreground">{user.id}</div>
+          <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
           <div className="mt-1 text-sm tabular-nums">Balance: ${Number(user.account_balance).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
         </div>
       </div>
