@@ -248,26 +248,25 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
   );
 }
 
-function ComplaintsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["admin_complaints"],
-    queryFn: async () => {
-      const { data } = await supabase.from("complaints").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
+function ComplaintsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const updateComplaint = useServerFn(updateAdminComplaint);
 
   const setStatus = async (id: string, status: string) => {
-    await supabase.from("complaints").update({ status }).eq("id", id);
-    toast.success("Updated"); refetch();
+    try {
+      await updateComplaint({ data: { id, status: status as "pending" | "resolved" } });
+      toast.success("Updated");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update complaint");
+    }
   };
 
-  if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
-  if (!data?.length) return <Card className="p-6 text-sm text-muted-foreground">No complaints.</Card>;
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (!items?.length) return <Card className="p-6 text-sm text-muted-foreground">No complaints.</Card>;
 
   return (
     <div className="space-y-2">
-      {data.map((c: any) => (
+      {items.map((c: any) => (
         <Card key={c.id} className="p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -286,31 +285,28 @@ function ComplaintsTab() {
   );
 }
 
-function SettingsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["app_settings_admin"],
-    queryFn: async () => {
-      const { data } = await supabase.from("app_settings").select("*");
-      return data ?? [];
-    },
-  });
-
+function SettingsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const updateSetting = useServerFn(updateAdminSetting);
   const [vals, setVals] = useState<Record<string, string>>({});
   useEffect(() => {
-    if (data) {
+    if (items) {
       const m: Record<string, string> = {};
-      data.forEach((r: any) => { m[r.key] = r.value; });
+      items.forEach((r: any) => { m[r.key] = r.value; });
       setVals(m);
     }
-  }, [data]);
+  }, [items]);
 
   const save = async (key: string) => {
-    const { error } = await supabase.from("app_settings").update({ value: vals[key], updated_at: new Date().toISOString() }).eq("key", key);
-    if (error) return toast.error(error.message);
-    toast.success("Saved"); refetch();
+    try {
+      await updateSetting({ data: { key, value: vals[key] } });
+      toast.success("Saved");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not save setting");
+    }
   };
 
-  if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   const labels: Record<string, string> = {
     deposit_wallet_usdt: "USDT (default) deposit address",
