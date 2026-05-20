@@ -1,8 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth-context";
+import {
+  adjustAdminBalance,
+  decideAdminDeposit,
+  decideAdminWithdrawal,
+  getAdminOverview,
+  updateAdminChart,
+  updateAdminComplaint,
+  updateAdminSetting,
+} from "@/lib/admin.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +23,8 @@ import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save } from
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
+const OWNER_EMAIL = "simonosawaru255@gmail.com";
+
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
@@ -21,24 +32,31 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const fetchOverview = useServerFn(getAdminOverview);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    const OWNER_EMAIL = "simonosawaru255@gmail.com";
     if (user.email?.toLowerCase() === OWNER_EMAIL) {
       setIsAdmin(true);
-      // best-effort: ensure role row exists; ignore failures (RLS-safe)
-      supabase.from("user_roles").insert({ user_id: user.id, role: "admin" as any }).then(() => {});
       return;
     }
-    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
-      .then(({ data }) => {
-        const ok = !!data;
-        setIsAdmin(ok);
-        if (!ok) { toast.error("Admin only"); navigate({ to: "/dashboard" }); }
-      });
+    setIsAdmin(false);
+    toast.error("Admin only");
+    navigate({ to: "/dashboard" });
   }, [user, navigate]);
+
+  const overviewQuery = useQuery({
+    queryKey: ["admin_overview", user?.id],
+    queryFn: () => fetchOverview({ data: {} }),
+    enabled: isAdmin === true,
+    refetchInterval: 6000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (overviewQuery.error) toast.error(overviewQuery.error.message || "Admin data could not load");
+  }, [overviewQuery.error]);
 
   if (isAdmin === null) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -72,87 +90,59 @@ function AdminPage() {
           <TabsTrigger value="settings">Wallet Settings</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="deposits"><DepositsTab /></TabsContent>
-        <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
-        <TabsContent value="users"><UsersTab /></TabsContent>
-        <TabsContent value="complaints"><ComplaintsTab /></TabsContent>
-        <TabsContent value="settings"><SettingsTab /></TabsContent>
+        <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="withdrawals"><WithdrawalsTab items={overviewQuery.data?.withdrawals} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="users"><UsersTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="complaints"><ComplaintsTab items={overviewQuery.data?.complaints} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="settings"><SettingsTab items={overviewQuery.data?.settings} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
       </Tabs>
     </motion.div>
   );
 }
 
-function DepositsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["admin_deposits"],
-    queryFn: async () => {
-      const { data } = await supabase.from("deposits").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
-
+function DepositsTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const decideDeposit = useServerFn(decideAdminDeposit);
   const decide = async (d: any, status: "approved" | "rejected") => {
-    if (status === "approved") {
-      // Credit user
-      const { data: profile } = await supabase.from("profiles").select("account_balance, available_cash").eq("id", d.user_id).maybeSingle();
-      const newBal = Number(profile?.account_balance ?? 0) + Number(d.amount);
-      const newCash = Number(profile?.available_cash ?? 0) + Number(d.amount);
-      const { error: pErr } = await supabase.from("profiles").update({ account_balance: newBal, available_cash: newCash, updated_at: new Date().toISOString() }).eq("id", d.user_id);
-      if (pErr) return toast.error(pErr.message);
-      await supabase.from("transactions").insert({
-        user_id: d.user_id, type: "deposit", amount: d.amount, asset_name: `Deposit ${d.crypto_currency}`, status: "completed",
-      });
+    try {
+      await decideDeposit({ data: { id: d.id, status } });
+      toast.success(`Deposit ${status}`);
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update deposit");
     }
-    const { error } = await supabase.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", d.id);
-    if (error) return toast.error(error.message);
-    toast.success(`Deposit ${status}`); refetch();
   };
 
-  return <RequestList items={data} loading={isLoading} kind="Deposit" onDecide={decide} />;
+  return <RequestList items={items} users={users} loading={loading} kind="Deposit" onDecide={decide} />;
 }
 
-function WithdrawalsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["admin_withdrawals"],
-    queryFn: async () => {
-      const { data } = await supabase.from("withdrawals").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
-
+function WithdrawalsTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const decideWithdrawal = useServerFn(decideAdminWithdrawal);
   const decide = async (w: any, status: "approved" | "rejected") => {
-    if (status === "approved") {
-      const { data: profile } = await supabase.from("profiles").select("account_balance, available_cash").eq("id", w.user_id).maybeSingle();
-      const cash = Number(profile?.available_cash ?? 0);
-      if (cash < Number(w.amount)) return toast.error("User has insufficient balance");
-      await supabase.from("profiles").update({
-        account_balance: Number(profile?.account_balance ?? 0) - Number(w.amount),
-        available_cash: cash - Number(w.amount),
-        updated_at: new Date().toISOString(),
-      }).eq("id", w.user_id);
-      await supabase.from("transactions").insert({
-        user_id: w.user_id, type: "withdrawal", amount: w.amount, asset_name: `Withdrawal ${w.crypto_currency}`, status: "completed",
-      });
+    try {
+      await decideWithdrawal({ data: { id: w.id, status } });
+      toast.success(`Withdrawal ${status}`);
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update withdrawal");
     }
-    const { error } = await supabase.from("withdrawals").update({ status, reviewed_at: new Date().toISOString() }).eq("id", w.id);
-    if (error) return toast.error(error.message);
-    toast.success(`Withdrawal ${status}`); refetch();
   };
 
-  return <RequestList items={data} loading={isLoading} kind="Withdrawal" onDecide={decide} />;
+  return <RequestList items={items} users={users} loading={loading} kind="Withdrawal" onDecide={decide} />;
 }
 
-function RequestList({ items, loading, kind, onDecide }: { items?: any[]; loading: boolean; kind: string; onDecide: (item: any, status: "approved" | "rejected") => void }) {
+function RequestList({ items, users, loading, kind, onDecide }: { items?: any[]; users?: any[]; loading: boolean; kind: string; onDecide: (item: any, status: "approved" | "rejected") => void | Promise<void> }) {
   if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
   if (!items?.length) return <Card className="p-6 text-sm text-muted-foreground">No {kind.toLowerCase()} requests.</Card>;
   return (
     <Card className="p-4">
       <div className="space-y-2">
-        {items.map((it) => (
+        {items.map((it) => {
+          const requestUser = users?.find((u) => u.id === it.user_id);
+          return (
           <div key={it.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
             <div className="min-w-0 flex-1">
               <div className="font-semibold tabular-nums">${Number(it.amount).toFixed(2)} · {it.crypto_currency}</div>
-              <div className="text-xs text-muted-foreground truncate">User: {it.user_id}</div>
+              <div className="text-xs text-muted-foreground truncate">{requestUser?.email ?? requestUser?.full_name ?? it.user_id}</div>
               {it.tx_hash && <div className="text-xs text-muted-foreground break-all">tx: {it.tx_hash}</div>}
               {it.wallet_address && <div className="text-xs text-muted-foreground break-all">to: {it.wallet_address}</div>}
               <div className="text-xs text-muted-foreground">{new Date(it.created_at).toLocaleString()}</div>
@@ -168,22 +158,14 @@ function RequestList({ items, loading, kind, onDecide }: { items?: any[]; loadin
               )}
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </Card>
   );
 }
 
-function UsersTab() {
-  const { data: users, refetch, isLoading } = useQuery({
-    queryKey: ["admin_users"],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
-
-  if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   return (
     <div className="space-y-3">
@@ -193,32 +175,34 @@ function UsersTab() {
   );
 }
 
-function UserRow({ user, onChange }: { user: any; onChange: () => void }) {
+function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
+  const saveUserChart = useServerFn(updateAdminChart);
+  const adjustBalance = useServerFn(adjustAdminBalance);
   const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
 
   const saveChart = async () => {
-    const { error } = await supabase.from("profiles").update({
-      chart_mode: mode, chart_intensity: Number(intensity) || 1, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString(),
-    }).eq("id", user.id);
-    if (error) return toast.error(error.message);
-    toast.success("Chart updated"); onChange();
+    try {
+      await saveUserChart({ data: { userId: user.id, mode: mode as "profit" | "loss" | "flat", intensity: Number(intensity) || 1 } });
+      toast.success("Chart updated");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update chart");
+    }
   };
 
   const creditProfit = async (sign: 1 | -1) => {
-    const amt = Number(creditAmt) * sign;
-    if (!amt) return toast.error("Enter amount");
-    const { data: p } = await supabase.from("profiles").select("account_balance, available_cash").eq("id", user.id).maybeSingle();
-    const newBal = Number(p?.account_balance ?? 0) + amt;
-    const newCash = Number(p?.available_cash ?? 0) + amt;
-    if (newCash < 0 || newBal < 0) return toast.error("Would go negative");
-    await supabase.from("profiles").update({ account_balance: newBal, available_cash: newCash, updated_at: new Date().toISOString() }).eq("id", user.id);
-    await supabase.from("transactions").insert({
-      user_id: user.id, type: sign > 0 ? "profit_credit" : "loss_debit", amount: Math.abs(amt), asset_name: sign > 0 ? "Profit credit" : "Loss adjustment", status: "completed",
-    });
-    toast.success(`${sign > 0 ? "Credited" : "Debited"} $${Math.abs(amt).toFixed(2)}`);
-    setCreditAmt(""); onChange();
+    const amt = Number(creditAmt);
+    if (!amt || amt <= 0) return toast.error("Enter amount");
+    try {
+      await adjustBalance({ data: { userId: user.id, amount: amt, direction: sign > 0 ? "credit" : "debit" } });
+      toast.success(`${sign > 0 ? "Credited" : "Debited"} $${amt.toFixed(2)}`);
+      setCreditAmt("");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not adjust balance");
+    }
   };
 
   return (
@@ -226,7 +210,7 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-semibold">{user.full_name ?? "—"}</div>
-          <div className="text-xs text-muted-foreground">{user.id}</div>
+          <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
           <div className="mt-1 text-sm tabular-nums">Balance: ${Number(user.account_balance).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
         </div>
       </div>
@@ -264,26 +248,25 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void }) {
   );
 }
 
-function ComplaintsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["admin_complaints"],
-    queryFn: async () => {
-      const { data } = await supabase.from("complaints").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
-  });
+function ComplaintsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const updateComplaint = useServerFn(updateAdminComplaint);
 
   const setStatus = async (id: string, status: string) => {
-    await supabase.from("complaints").update({ status }).eq("id", id);
-    toast.success("Updated"); refetch();
+    try {
+      await updateComplaint({ data: { id, status: status as "pending" | "resolved" } });
+      toast.success("Updated");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update complaint");
+    }
   };
 
-  if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
-  if (!data?.length) return <Card className="p-6 text-sm text-muted-foreground">No complaints.</Card>;
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (!items?.length) return <Card className="p-6 text-sm text-muted-foreground">No complaints.</Card>;
 
   return (
     <div className="space-y-2">
-      {data.map((c: any) => (
+      {items.map((c: any) => (
         <Card key={c.id} className="p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -302,31 +285,28 @@ function ComplaintsTab() {
   );
 }
 
-function SettingsTab() {
-  const { data, refetch, isLoading } = useQuery({
-    queryKey: ["app_settings_admin"],
-    queryFn: async () => {
-      const { data } = await supabase.from("app_settings").select("*");
-      return data ?? [];
-    },
-  });
-
+function SettingsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const updateSetting = useServerFn(updateAdminSetting);
   const [vals, setVals] = useState<Record<string, string>>({});
   useEffect(() => {
-    if (data) {
+    if (items) {
       const m: Record<string, string> = {};
-      data.forEach((r: any) => { m[r.key] = r.value; });
+      items.forEach((r: any) => { m[r.key] = r.value; });
       setVals(m);
     }
-  }, [data]);
+  }, [items]);
 
   const save = async (key: string) => {
-    const { error } = await supabase.from("app_settings").update({ value: vals[key], updated_at: new Date().toISOString() }).eq("key", key);
-    if (error) return toast.error(error.message);
-    toast.success("Saved"); refetch();
+    try {
+      await updateSetting({ data: { key, value: vals[key] } });
+      toast.success("Saved");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not save setting");
+    }
   };
 
-  if (isLoading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   const labels: Record<string, string> = {
     deposit_wallet_usdt: "USDT (default) deposit address",
