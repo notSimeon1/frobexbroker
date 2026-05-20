@@ -1,8 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth-context";
+import {
+  adjustAdminBalance,
+  decideAdminDeposit,
+  decideAdminWithdrawal,
+  getAdminOverview,
+  updateAdminChart,
+  updateAdminComplaint,
+  updateAdminSetting,
+} from "@/lib/admin.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +23,8 @@ import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save } from
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
+const OWNER_EMAIL = "simonosawaru255@gmail.com";
+
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
 });
@@ -21,24 +32,31 @@ export const Route = createFileRoute("/_authenticated/admin")({
 function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const fetchOverview = useServerFn(getAdminOverview);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    const OWNER_EMAIL = "simonosawaru255@gmail.com";
     if (user.email?.toLowerCase() === OWNER_EMAIL) {
       setIsAdmin(true);
-      // best-effort: ensure role row exists; ignore failures (RLS-safe)
-      supabase.from("user_roles").insert({ user_id: user.id, role: "admin" as any }).then(() => {});
       return;
     }
-    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
-      .then(({ data }) => {
-        const ok = !!data;
-        setIsAdmin(ok);
-        if (!ok) { toast.error("Admin only"); navigate({ to: "/dashboard" }); }
-      });
+    setIsAdmin(false);
+    toast.error("Admin only");
+    navigate({ to: "/dashboard" });
   }, [user, navigate]);
+
+  const overviewQuery = useQuery({
+    queryKey: ["admin_overview", user?.id],
+    queryFn: () => fetchOverview({ data: {} }),
+    enabled: isAdmin === true,
+    refetchInterval: 6000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (overviewQuery.error) toast.error(overviewQuery.error.message || "Admin data could not load");
+  }, [overviewQuery.error]);
 
   if (isAdmin === null) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
@@ -72,11 +90,11 @@ function AdminPage() {
           <TabsTrigger value="settings">Wallet Settings</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="deposits"><DepositsTab /></TabsContent>
-        <TabsContent value="withdrawals"><WithdrawalsTab /></TabsContent>
-        <TabsContent value="users"><UsersTab /></TabsContent>
-        <TabsContent value="complaints"><ComplaintsTab /></TabsContent>
-        <TabsContent value="settings"><SettingsTab /></TabsContent>
+        <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="withdrawals"><WithdrawalsTab items={overviewQuery.data?.withdrawals} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="users"><UsersTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="complaints"><ComplaintsTab items={overviewQuery.data?.complaints} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="settings"><SettingsTab items={overviewQuery.data?.settings} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
       </Tabs>
     </motion.div>
   );
