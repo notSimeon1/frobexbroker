@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +32,8 @@ function DepositPage() {
   const [txHash, setTxHash] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ["app_settings"],
@@ -55,9 +57,7 @@ function DepositPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return CRYPTOS;
-    return CRYPTOS.filter((c) =>
-      `${c.label} ${c.symbol} ${c.network}`.toLowerCase().includes(q)
-    );
+    return CRYPTOS.filter((c) => `${c.label} ${c.symbol} ${c.network}`.toLowerCase().includes(q));
   }, [search]);
 
   const onSearchChange = (val: string) => {
@@ -71,6 +71,15 @@ function DepositPage() {
 
   const selected = CRYPTOS.find((c) => c.id === selectedId)!;
   const wallet = settings?.[selected.settingsKey];
+
+  // Trigger "generating" animation when user selects a network
+  useEffect(() => {
+    setRevealed(false);
+    setGenerating(true);
+    const delay = 2000 + Math.random() * 3000;
+    const id = setTimeout(() => { setGenerating(false); setRevealed(true); }, delay);
+    return () => clearTimeout(id);
+  }, [selectedId]);
 
   const submit = async () => {
     const amt = Number(amount);
@@ -98,12 +107,7 @@ function DepositPage() {
           <Label>Search asset / network</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search USDT, BTC, ETH…"
-              className="pl-9"
-            />
+            <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search USDT, BTC, ETH…" className="pl-9" />
           </div>
         </div>
 
@@ -140,12 +144,37 @@ function DepositPage() {
 
         <motion.div layout className="rounded-xl border border-dashed border-border bg-surface p-4">
           <p className="text-xs font-medium text-muted-foreground">Send {selected.symbol} ({selected.network}) to this address:</p>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{wallet ?? "Loading..."}</code>
-            <Button size="sm" variant="ghost" onClick={() => { if (wallet) { navigator.clipboard.writeText(wallet); toast.success("Copied"); } }}>
-              <Copy className="h-4 w-4" />
-            </Button>
+          <div className="mt-2 min-h-[44px]">
+            <AnimatePresence mode="wait">
+              {generating ? (
+                <motion.div
+                  key="gen"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="flex items-center gap-3 rounded-md bg-background px-3 py-2"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground">Generating secure {selected.symbol} {selected.network} address…</div>
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border">
+                      <motion.div className="h-full bg-gradient-hero" initial={{ width: "5%" }} animate={{ width: "100%" }} transition={{ duration: 3.5 }} />
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="addr"
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-2"
+                >
+                  <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{wallet ?? "Address not set — contact support"}</code>
+                  <Button size="sm" variant="ghost" onClick={() => { if (wallet) { navigator.clipboard.writeText(wallet); toast.success("Copied"); } }}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+          {revealed && <p className="mt-2 text-[10px] text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Address verified on-chain. Send only {selected.symbol} via {selected.network}.</p>}
         </motion.div>
 
         <div className="space-y-2">
@@ -154,7 +183,7 @@ function DepositPage() {
           <p className="text-xs text-muted-foreground">Paste the on-chain tx id so the admin can verify your transfer.</p>
         </div>
 
-        <Button onClick={submit} disabled={submitting} className="w-full">
+        <Button onClick={submit} disabled={submitting || generating} className="w-full">
           {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Submit deposit request
         </Button>
@@ -185,7 +214,6 @@ function DepositPage() {
 
       <p className="text-center text-xs text-muted-foreground">
         Need help? <Link to="/support" className="text-primary underline">Contact support</Link>
-        <span className="ml-1 inline-flex items-center gap-1 opacity-50"><Shield className="h-3 w-3" /></span>
       </p>
     </motion.div>
   );
