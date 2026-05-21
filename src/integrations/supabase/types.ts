@@ -131,42 +131,210 @@ export type Database = {
         }
         Relationships: []
       }
+      kyc_submissions: {
+        Row: {
+          admin_note: string | null
+          country: string | null
+          created_at: string
+          date_of_birth: string | null
+          document_type: string
+          document_url: string
+          full_name: string
+          id: string
+          reviewed_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          document_type: string
+          document_url: string
+          full_name: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          country?: string | null
+          created_at?: string
+          date_of_birth?: string | null
+          document_type?: string
+          document_url?: string
+          full_name?: string
+          id?: string
+          reviewed_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      live_positions: {
+        Row: {
+          account_mode: string
+          asset: string
+          close_price: number | null
+          closed_at: string | null
+          entry_price: number
+          id: string
+          leverage: number
+          margin: number
+          opened_at: string
+          pnl: number
+          quantity: number
+          side: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_mode?: string
+          asset: string
+          close_price?: number | null
+          closed_at?: string | null
+          entry_price: number
+          id?: string
+          leverage?: number
+          margin: number
+          opened_at?: string
+          pnl?: number
+          quantity: number
+          side: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_mode?: string
+          asset?: string
+          close_price?: number | null
+          closed_at?: string | null
+          entry_price?: number
+          id?: string
+          leverage?: number
+          margin?: number
+          opened_at?: string
+          pnl?: number
+          quantity?: number
+          side?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      market_news: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          impact: string
+          source: string | null
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          impact?: string
+          source?: string | null
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          impact?: string
+          source?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_balance: number
+          account_mode: string
           available_cash: number
           avatar_url: string | null
           chart_intensity: number
           chart_mode: string
           chart_seed: number
           created_at: string
+          demo_balance: number
           full_name: string | null
           id: string
+          is_suspended: boolean
+          kyc_status: string
+          live_balance: number
+          referral_code: string | null
+          referred_by: string | null
           updated_at: string
         }
         Insert: {
           account_balance?: number
+          account_mode?: string
           available_cash?: number
           avatar_url?: string | null
           chart_intensity?: number
           chart_mode?: string
           chart_seed?: number
           created_at?: string
+          demo_balance?: number
           full_name?: string | null
           id: string
+          is_suspended?: boolean
+          kyc_status?: string
+          live_balance?: number
+          referral_code?: string | null
+          referred_by?: string | null
           updated_at?: string
         }
         Update: {
           account_balance?: number
+          account_mode?: string
           available_cash?: number
           avatar_url?: string | null
           chart_intensity?: number
           chart_mode?: string
           chart_seed?: number
           created_at?: string
+          demo_balance?: number
           full_name?: string | null
           id?: string
+          is_suspended?: boolean
+          kyc_status?: string
+          live_balance?: number
+          referral_code?: string | null
+          referred_by?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      referral_earnings: {
+        Row: {
+          amount: number
+          created_at: string
+          deposit_id: string | null
+          id: string
+          referred_user_id: string
+          referrer_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          deposit_id?: string | null
+          id?: string
+          referred_user_id: string
+          referrer_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          deposit_id?: string | null
+          id?: string
+          referred_user_id?: string
+          referrer_id?: string
         }
         Relationships: []
       }
