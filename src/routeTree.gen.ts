@@ -15,7 +15,9 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedWithdrawRouteImport } from './routes/_authenticated/withdraw'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
+import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedMarketRouteImport } from './routes/_authenticated/market'
+import { Route as AuthenticatedKycRouteImport } from './routes/_authenticated/kyc'
 import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticated/deposit'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
@@ -50,9 +52,19 @@ const AuthenticatedTransactionsRoute =
     path: '/transactions',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
+  id: '/referrals',
+  path: '/referrals',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedMarketRoute = AuthenticatedMarketRouteImport.update({
   id: '/market',
   path: '/market',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedKycRoute = AuthenticatedKycRouteImport.update({
+  id: '/kyc',
+  path: '/kyc',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedDepositRoute = AuthenticatedDepositRouteImport.update({
@@ -78,7 +90,9 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
+  '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
+  '/referrals': typeof AuthenticatedReferralsRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
 }
@@ -89,7 +103,9 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
+  '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
+  '/referrals': typeof AuthenticatedReferralsRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
 }
@@ -102,7 +118,9 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/deposit': typeof AuthenticatedDepositRoute
+  '/_authenticated/kyc': typeof AuthenticatedKycRoute
   '/_authenticated/market': typeof AuthenticatedMarketRoute
+  '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
   '/_authenticated/withdraw': typeof AuthenticatedWithdrawRoute
 }
@@ -115,7 +133,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/deposit'
+    | '/kyc'
     | '/market'
+    | '/referrals'
     | '/transactions'
     | '/withdraw'
   fileRoutesByTo: FileRoutesByTo
@@ -126,7 +146,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/deposit'
+    | '/kyc'
     | '/market'
+    | '/referrals'
     | '/transactions'
     | '/withdraw'
   id:
@@ -138,7 +160,9 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/dashboard'
     | '/_authenticated/deposit'
+    | '/_authenticated/kyc'
     | '/_authenticated/market'
+    | '/_authenticated/referrals'
     | '/_authenticated/transactions'
     | '/_authenticated/withdraw'
   fileRoutesById: FileRoutesById
@@ -194,11 +218,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTransactionsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/referrals': {
+      id: '/_authenticated/referrals'
+      path: '/referrals'
+      fullPath: '/referrals'
+      preLoaderRoute: typeof AuthenticatedReferralsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/market': {
       id: '/_authenticated/market'
       path: '/market'
       fullPath: '/market'
       preLoaderRoute: typeof AuthenticatedMarketRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/kyc': {
+      id: '/_authenticated/kyc'
+      path: '/kyc'
+      fullPath: '/kyc'
+      preLoaderRoute: typeof AuthenticatedKycRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/deposit': {
@@ -229,7 +267,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDepositRoute: typeof AuthenticatedDepositRoute
+  AuthenticatedKycRoute: typeof AuthenticatedKycRoute
   AuthenticatedMarketRoute: typeof AuthenticatedMarketRoute
+  AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute
   AuthenticatedWithdrawRoute: typeof AuthenticatedWithdrawRoute
 }
@@ -238,7 +278,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDepositRoute: AuthenticatedDepositRoute,
+  AuthenticatedKycRoute: AuthenticatedKycRoute,
   AuthenticatedMarketRoute: AuthenticatedMarketRoute,
+  AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
   AuthenticatedWithdrawRoute: AuthenticatedWithdrawRoute,
 }
