@@ -14,6 +14,8 @@ import {
   adminUpdateChart,
   adminUpdateComplaint,
   adminUpdateSetting,
+  closeUserPosition,
+  openUserPosition,
 } from "./admin.server";
 
 const decisionSchema = z.object({ id: z.string().uuid(), status: z.enum(["approved", "rejected"]) });
@@ -31,6 +33,16 @@ const newsSchema = z.object({
   source: z.string().max(120).default("Frobex Desk"),
 });
 const docSchema = z.object({ path: z.string().min(1).max(500) });
+const openPositionSchema = z.object({
+  asset: z.string().min(1).max(40),
+  side: z.enum(["buy", "sell"]),
+  quantity: z.number().positive(),
+  leverage: z.number().min(1).max(100),
+  margin: z.number().positive().max(1_000_000),
+  entryPrice: z.number().positive(),
+  accountMode: z.enum(["demo", "live"]),
+});
+const closePositionSchema = z.object({ id: z.string().uuid(), closePrice: z.number().positive() });
 
 export const getAdminOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -90,3 +102,22 @@ export const getAdminKycUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => docSchema.parse(input))
   .handler(async ({ data, context }) => adminGetKycDocumentUrl(context.userId, data.path));
+
+export const openPosition = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => openPositionSchema.parse(input))
+  .handler(async ({ data, context }) => openUserPosition(
+    context.userId,
+    data.asset,
+    data.side,
+    data.quantity,
+    data.leverage,
+    data.margin,
+    data.entryPrice,
+    data.accountMode,
+  ));
+
+export const closePosition = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => closePositionSchema.parse(input))
+  .handler(async ({ data, context }) => closeUserPosition(context.userId, data.id, data.closePrice));
