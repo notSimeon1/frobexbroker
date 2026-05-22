@@ -56,69 +56,8 @@ export async function adminGetOverview(userId: string) {
 
 export async function adminDecideDeposit(userId: string, id: string, status: "approved" | "rejected") {
   await assertOwner(userId);
-  const { data: deposit } = await supabaseAdmin.from("deposits").select("*").eq("id", id).maybeSingle();
-  if (!deposit) throw new Error("Deposit request not found");
-  if (deposit.status !== "pending") return { ok: true };
-
-  if (status === "approved") {
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("account_balance, available_cash, live_balance, account_mode, referred_by")
-      .eq("id", deposit.user_id)
-      .maybeSingle();
-    if (!profile) throw new Error("User profile not found");
-    const amount = Number(deposit.amount);
-
-    // Credit user (live + legacy fields)
-    await supabaseAdmin.from("profiles").update({
-      account_balance: Number(profile.account_balance) + amount,
-      available_cash: Number(profile.available_cash) + amount,
-      live_balance: Number(profile.live_balance) + amount,
-      updated_at: new Date().toISOString(),
-    }).eq("id", deposit.user_id);
-
-    await supabaseAdmin.from("transactions").insert({
-      user_id: deposit.user_id,
-      type: "deposit",
-      amount,
-      asset_name: `Deposit ${deposit.crypto_currency}`,
-      status: "completed",
-    });
-
-    // Auto referral payout 20%
-    if (profile.referred_by) {
-      const bonus = +(amount * 0.2).toFixed(2);
-      const { data: refProfile } = await supabaseAdmin
-        .from("profiles")
-        .select("account_balance, available_cash, live_balance")
-        .eq("id", profile.referred_by)
-        .maybeSingle();
-      if (refProfile) {
-        await supabaseAdmin.from("profiles").update({
-          account_balance: Number(refProfile.account_balance) + bonus,
-          available_cash: Number(refProfile.available_cash) + bonus,
-          live_balance: Number(refProfile.live_balance) + bonus,
-          updated_at: new Date().toISOString(),
-        }).eq("id", profile.referred_by);
-
-        await supabaseAdmin.from("referral_earnings").insert({
-          referrer_id: profile.referred_by,
-          referred_user_id: deposit.user_id,
-          deposit_id: deposit.id,
-          amount: bonus,
-        });
-        await supabaseAdmin.from("transactions").insert({
-          user_id: profile.referred_by,
-          type: "referral_bonus",
-          amount: bonus,
-          asset_name: "Referral commission (20%)",
-          status: "completed",
-        });
-      }
-    }
-  }
-
-  await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
+  const { error } = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status });
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
@@ -195,7 +134,15 @@ export async function adminUpdateSetting(userId: string, key: string, value: str
 
 export async function adminToggleAccountMode(userId: string, targetUserId: string, mode: "demo" | "live") {
   await assertOwner(userId);
-  await supabaseAdmin.from("profiles").update({ account_mode: mode, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ account_mode: mode, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  if (error) throw new Error(error.message);
+  await supabaseAdmin.from("transactions").insert({
+    user_id: targetUserId,
+    type: "account_mode",
+    amount: 0,
+    asset_name: `Account switched to ${mode.toUpperCase()}`,
+    status: "completed",
+  });
   return { ok: true };
 }
 
@@ -225,4 +172,42 @@ export async function adminGetKycDocumentUrl(userId: string, path: string) {
   const { data, error } = await supabaseAdmin.storage.from("kyc-documents").createSignedUrl(path, 60 * 10);
   if (error) throw new Error(error.message);
   return { url: data.signedUrl };
+}
+
+export async function openUserPosition(
+  userId: string,
+  asset: string,
+  side: "buy" | "sell",
+  quantity: number,
+  leverage: number,
+  margin: number,
+  entryPrice: number,
+  accountMode: "demo" | "live",
+) {
+  const { data, error } = await (supabaseAdmin as any).rpc("open_position_atomic", {
+    _user_id: userId,
+    _asset: asset,
+    _side: side,
+    _quantity: quantity,
+    _leverage: leverage,
+    _margin: margin,
+    _entry_price: entryPrice,
+    _account_mode: accountMode,
+  });
+  if (error) throw new Error(error.message);
+  return { id: data as string };
+}
+
+export async function closeUserPosition(userId: string, positionId: string, closePrice: number) {
+  const { data: position, error: posErr } = await supabaseAdmin
+    .from("live_positions")
+    .select("user_id")
+    .eq("id", positionId)
+    .maybeSingle();
+  if (posErr) throw new Error(posErr.message);
+  if (!position || position.user_id !== userId) throw new Error("Position not found");
+
+  const { data, error } = await (supabaseAdmin as any).rpc("close_position_atomic", { _position_id: positionId, _close_price: closePrice });
+  if (error) throw new Error(error.message);
+  return { pnl: Number(data ?? 0) };
 }

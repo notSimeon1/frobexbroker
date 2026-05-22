@@ -18,6 +18,8 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { TradingChart, type Candle } from "@/components/TradingChart";
 import type { Time } from "lightweight-charts";
+import { useServerFn } from "@tanstack/react-start";
+import { closePosition, openPosition } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -86,6 +88,18 @@ function Dashboard() {
     enabled: !!user,
     refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`profile-live-${user.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, () => {
+        qc.invalidateQueries({ queryKey: ["profile", user.id] });
+        qc.invalidateQueries({ queryKey: ["transactions", user.id] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, qc]);
 
   const mode = (profile?.chart_mode ?? "flat") as ChartMode;
   const intensity = Number(profile?.chart_intensity ?? 1);
@@ -203,6 +217,7 @@ function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset:
   const [leverage, setLeverage] = useState("10");
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
+  const openPositionFn = useServerFn(openPosition);
 
   const open = async (side: "buy" | "sell") => {
     if (!userId) return;
@@ -215,13 +230,11 @@ function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset:
     setBusy(true);
     try {
       const qty = (margin * lev) / price;
-      const { error } = await supabase.from("live_positions").insert({
-        user_id: userId, asset, side, quantity: qty, leverage: lev,
-        margin, entry_price: price, account_mode: mode,
-      });
-      if (error) throw error;
+      await openPositionFn({ data: { asset, side, quantity: qty, leverage: lev, margin, entryPrice: price, accountMode: mode } });
       toast.success(`${side.toUpperCase()} ${asset} @ $${price.toFixed(2)}`);
       qc.invalidateQueries({ queryKey: ["positions"] });
+      qc.invalidateQueries({ queryKey: ["profile", userId] });
+      qc.invalidateQueries({ queryKey: ["transactions", userId] });
     } catch (err: any) {
       toast.error(err.message ?? "Trade failed");
     } finally {
@@ -250,6 +263,7 @@ function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset:
 }
 
 function LivePositions({ price, asset, userId, qc }: { price: number; asset: string; userId?: string; qc: ReturnType<typeof useQueryClient> }) {
+  const closePositionFn = useServerFn(closePosition);
   const { data: positions } = useQuery({
     queryKey: ["positions", userId],
     queryFn: async () => {
@@ -265,32 +279,12 @@ function LivePositions({ price, asset, userId, qc }: { price: number; asset: str
     const direction = p.side === "buy" ? 1 : -1;
     const pnl = +((livePrice - Number(p.entry_price)) * Number(p.quantity) * direction).toFixed(2);
     try {
-      const { error } = await supabase.from("live_positions").update({
-        status: "closed", close_price: livePrice, closed_at: new Date().toISOString(), pnl,
-      }).eq("id", p.id);
-      if (error) throw error;
-
-      // Credit margin + pnl back to user's available cash + balance
-      const { data: prof } = await supabase.from("profiles").select("account_balance, available_cash, live_balance, demo_balance").eq("id", userId!).maybeSingle();
-      if (prof) {
-        const delta = Number(p.margin) + pnl;
-        const updates: any = {
-          account_balance: Number(prof.account_balance) + delta,
-          available_cash: Number(prof.available_cash) + delta,
-          updated_at: new Date().toISOString(),
-        };
-        if (p.account_mode === "live") updates.live_balance = Number(prof.live_balance) + delta;
-        else updates.demo_balance = Number(prof.demo_balance) + delta;
-        await supabase.from("profiles").update(updates).eq("id", userId!);
-        await supabase.from("transactions").insert({
-          user_id: userId!, type: pnl >= 0 ? "trade_profit" : "trade_loss",
-          amount: Math.abs(pnl), asset_name: `Close ${p.side.toUpperCase()} ${p.asset}`,
-          status: "completed",
-        });
-      }
-      toast.success(`Closed ${p.asset} · P&L ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`);
+      const result = await closePositionFn({ data: { id: p.id, closePrice: livePrice } });
+      const finalPnl = Number(result.pnl ?? pnl);
+      toast.success(`Closed ${p.asset} · P&L ${finalPnl >= 0 ? "+" : ""}$${finalPnl.toFixed(2)}`);
       qc.invalidateQueries({ queryKey: ["positions"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
+      qc.invalidateQueries({ queryKey: ["transactions", userId] });
     } catch (err: any) {
       toast.error(err.message ?? "Close failed");
     }

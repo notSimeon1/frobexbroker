@@ -6,8 +6,13 @@ import { useAuth } from "@/lib/auth-context";
 import {
   adjustAdminBalance,
   decideAdminDeposit,
+  decideAdminKyc,
   decideAdminWithdrawal,
+  getAdminKycUrl,
   getAdminOverview,
+  postAdminNews,
+  toggleAdminAccountMode,
+  toggleAdminSuspend,
   updateAdminChart,
   updateAdminComplaint,
   updateAdminSetting,
@@ -19,7 +24,9 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -48,7 +55,7 @@ function AdminPage() {
 
   const overviewQuery = useQuery({
     queryKey: ["admin_overview", user?.id],
-    queryFn: () => fetchOverview({ data: {} }),
+    queryFn: () => fetchOverview(),
     enabled: isAdmin === true,
     refetchInterval: 6000,
     retry: false,
@@ -86,6 +93,8 @@ function AdminPage() {
           <TabsTrigger value="deposits">Deposits</TabsTrigger>
           <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
           <TabsTrigger value="users">Users &amp; Charts</TabsTrigger>
+          <TabsTrigger value="kyc">KYC Review</TabsTrigger>
+          <TabsTrigger value="news">Market News</TabsTrigger>
           <TabsTrigger value="complaints">Complaints</TabsTrigger>
           <TabsTrigger value="settings">Wallet Settings</TabsTrigger>
         </TabsList>
@@ -93,6 +102,8 @@ function AdminPage() {
         <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="withdrawals"><WithdrawalsTab items={overviewQuery.data?.withdrawals} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="users"><UsersTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="kyc"><KycTab items={overviewQuery.data?.kyc} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="news"><NewsTab items={overviewQuery.data?.news} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="complaints"><ComplaintsTab items={overviewQuery.data?.complaints} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="settings"><SettingsTab items={overviewQuery.data?.settings} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
       </Tabs>
@@ -178,6 +189,8 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
 function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
+  const toggleMode = useServerFn(toggleAdminAccountMode);
+  const toggleSuspend = useServerFn(toggleAdminSuspend);
   const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
@@ -205,13 +218,43 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
     }
   };
 
+  const setAccountMode = async (checked: boolean) => {
+    const nextMode = checked ? "live" : "demo";
+    try {
+      await toggleMode({ data: { userId: user.id, mode: nextMode } });
+      toast.success(`Account switched to ${nextMode.toUpperCase()}`);
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not switch account mode");
+    }
+  };
+
+  const setSuspended = async (checked: boolean) => {
+    try {
+      await toggleSuspend({ data: { userId: user.id, suspended: checked } });
+      toast.success(checked ? "Account suspended" : "Account restored");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update suspension");
+    }
+  };
+
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-semibold">{user.full_name ?? "—"}</div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
-          <div className="mt-1 text-sm tabular-nums">Balance: ${Number(user.account_balance).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
+          <div className="mt-1 text-sm tabular-nums">Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: ${Number(user.demo_balance ?? 0).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant={user.account_mode === "live" ? "default" : "secondary"} className={user.account_mode === "live" ? "bg-success text-success-foreground" : ""}>{String(user.account_mode ?? "demo").toUpperCase()}</Badge>
+            <Badge variant={user.kyc_status === "approved" ? "default" : "outline"}>{String(user.kyc_status ?? "none").toUpperCase()} KYC</Badge>
+            {user.is_suspended && <Badge variant="destructive">Suspended</Badge>}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+          <label className="flex items-center justify-between gap-3"><span>Live mode</span><Switch checked={user.account_mode === "live"} onCheckedChange={setAccountMode} /></label>
+          <label className="flex items-center justify-between gap-3"><span className="flex items-center gap-1"><Ban className="h-3 w-3" /> Suspend</span><Switch checked={!!user.is_suspended} onCheckedChange={setSuspended} /></label>
         </div>
       </div>
 
@@ -245,6 +288,104 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
         <Button onClick={() => creditProfit(1)} className="bg-success hover:bg-success/90 text-success-foreground">Credit profit</Button>
       </div>
     </Card>
+  );
+}
+
+function KycTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const decideKyc = useServerFn(decideAdminKyc);
+  const getDocUrl = useServerFn(getAdminKycUrl);
+
+  const decide = async (id: string, status: "approved" | "rejected") => {
+    try {
+      await decideKyc({ data: { id, status, note: status === "approved" ? "Verified by admin" : "Rejected by admin" } });
+      toast.success(`KYC ${status}`);
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update KYC");
+    }
+  };
+
+  const openDoc = async (path: string) => {
+    try {
+      const res = await getDocUrl({ data: { path } });
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not open document");
+    }
+  };
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  const pending = (items ?? []).filter((k) => k.status === "pending");
+  const rows = pending.length ? pending : (items ?? []);
+  if (!rows.length) return <Card className="p-6 text-sm text-muted-foreground">No KYC submissions yet.</Card>;
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-2">
+        {rows.map((k: any) => {
+          const owner = users?.find((u) => u.id === k.user_id);
+          return (
+            <div key={k.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{k.full_name} · {k.document_type}</div>
+                <div className="text-xs text-muted-foreground">{owner?.email ?? k.user_id} · {k.country ?? "—"} · {new Date(k.created_at).toLocaleString()}</div>
+                {k.admin_note && <div className="text-xs text-muted-foreground">Note: {k.admin_note}</div>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={k.status === "approved" ? "default" : k.status === "rejected" ? "destructive" : "secondary"}>{k.status}</Badge>
+                <Button size="sm" variant="outline" onClick={() => openDoc(k.document_url)}><FileText className="mr-1 h-4 w-4" /> View</Button>
+                {k.status === "pending" && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => decide(k.id, "rejected")}><X className="h-4 w-4" /></Button>
+                    <Button size="sm" onClick={() => decide(k.id, "approved")}><Check className="mr-1 h-4 w-4" /> Approve</Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function NewsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const postNews = useServerFn(postAdminNews);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [impact, setImpact] = useState<"low" | "medium" | "high">("medium");
+  const [source, setSource] = useState("Frobex Desk");
+
+  const publish = async () => {
+    if (!title.trim()) return toast.error("Enter a news headline");
+    try {
+      await postNews({ data: { title: title.trim(), body: body.trim(), impact, source: source.trim() || "Frobex Desk" } });
+      toast.success("Market news published");
+      setTitle(""); setBody("");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not publish news");
+    }
+  };
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+      <Card className="space-y-4 p-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Newspaper className="h-4 w-4 text-primary" /> Publish market news</h2>
+        <div className="space-y-2"><Label>Headline</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} /></div>
+        <div className="space-y-2"><Label>Details</Label><Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} /></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2"><Label>Impact</Label><Select value={impact} onValueChange={(v) => setImpact(v as "low" | "medium" | "high")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem></SelectContent></Select></div>
+          <div className="space-y-2"><Label>Source</Label><Input value={source} onChange={(e) => setSource(e.target.value)} maxLength={120} /></div>
+        </div>
+        <Button onClick={publish} className="w-full"><Save className="mr-1.5 h-4 w-4" /> Publish</Button>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-3 text-lg font-semibold">Published ticker</h2>
+        {!items?.length ? <p className="text-sm text-muted-foreground">No news yet.</p> : <div className="space-y-2">{items.map((n: any) => <div key={n.id} className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"><div className="flex items-center gap-2"><Badge variant={n.impact === "high" ? "destructive" : "secondary"}>{n.impact}</Badge><span className="font-semibold">{n.title}</span></div><div className="mt-1 text-xs text-muted-foreground">{n.source ?? "Wire"} · {new Date(n.created_at).toLocaleString()}</div></div>)}</div>}
+      </Card>
+    </div>
   );
 }
 
