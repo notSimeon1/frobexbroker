@@ -55,6 +55,13 @@ function WithdrawPage() {
     });
     setSubmitting(false);
     if (error) { toast.error(error.message); return; }
+    await supabase.from("transactions").insert({
+      user_id: user!.id,
+      type: "withdrawal_request",
+      amount: amt,
+      asset_name: `Pending withdrawal ${currency}`,
+      status: "pending",
+    });
     toast.success("Withdrawal requested — awaiting admin approval");
     setAmount(""); setWallet(""); refetch();
   };
