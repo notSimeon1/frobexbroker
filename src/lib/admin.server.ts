@@ -173,3 +173,41 @@ export async function adminGetKycDocumentUrl(userId: string, path: string) {
   if (error) throw new Error(error.message);
   return { url: data.signedUrl };
 }
+
+export async function openUserPosition(
+  userId: string,
+  asset: string,
+  side: "buy" | "sell",
+  quantity: number,
+  leverage: number,
+  margin: number,
+  entryPrice: number,
+  accountMode: "demo" | "live",
+) {
+  const { data, error } = await (supabaseAdmin as any).rpc("open_position_atomic", {
+    _user_id: userId,
+    _asset: asset,
+    _side: side,
+    _quantity: quantity,
+    _leverage: leverage,
+    _margin: margin,
+    _entry_price: entryPrice,
+    _account_mode: accountMode,
+  });
+  if (error) throw new Error(error.message);
+  return { id: data as string };
+}
+
+export async function closeUserPosition(userId: string, positionId: string, closePrice: number) {
+  const { data: position, error: posErr } = await supabaseAdmin
+    .from("live_positions")
+    .select("user_id")
+    .eq("id", positionId)
+    .maybeSingle();
+  if (posErr) throw new Error(posErr.message);
+  if (!position || position.user_id !== userId) throw new Error("Position not found");
+
+  const { data, error } = await (supabaseAdmin as any).rpc("close_position_atomic", { _position_id: positionId, _close_price: closePrice });
+  if (error) throw new Error(error.message);
+  return { pnl: Number(data ?? 0) };
+}
