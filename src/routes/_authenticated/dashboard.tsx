@@ -18,6 +18,8 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { TradingChart, type Candle } from "@/components/TradingChart";
 import type { Time } from "lightweight-charts";
+import { useServerFn } from "@tanstack/react-start";
+import { closePosition, openPosition } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -86,6 +88,18 @@ function Dashboard() {
     enabled: !!user,
     refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`profile-live-${user.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, () => {
+        qc.invalidateQueries({ queryKey: ["profile", user.id] });
+        qc.invalidateQueries({ queryKey: ["transactions", user.id] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, qc]);
 
   const mode = (profile?.chart_mode ?? "flat") as ChartMode;
   const intensity = Number(profile?.chart_intensity ?? 1);
