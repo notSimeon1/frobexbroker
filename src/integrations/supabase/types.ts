@@ -479,6 +479,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_decide_deposit_atomic: {
+        Args: { _deposit_id: string; _status: string }
+        Returns: undefined
+      }
+      close_position_atomic: {
+        Args: { _close_price: number; _position_id: string }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
