@@ -291,6 +291,104 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
   );
 }
 
+function KycTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const decideKyc = useServerFn(decideAdminKyc);
+  const getDocUrl = useServerFn(getAdminKycUrl);
+
+  const decide = async (id: string, status: "approved" | "rejected") => {
+    try {
+      await decideKyc({ data: { id, status, note: status === "approved" ? "Verified by admin" : "Rejected by admin" } });
+      toast.success(`KYC ${status}`);
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update KYC");
+    }
+  };
+
+  const openDoc = async (path: string) => {
+    try {
+      const res = await getDocUrl({ data: { path } });
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not open document");
+    }
+  };
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  const pending = (items ?? []).filter((k) => k.status === "pending");
+  const rows = pending.length ? pending : (items ?? []);
+  if (!rows.length) return <Card className="p-6 text-sm text-muted-foreground">No KYC submissions yet.</Card>;
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-2">
+        {rows.map((k: any) => {
+          const owner = users?.find((u) => u.id === k.user_id);
+          return (
+            <div key={k.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{k.full_name} · {k.document_type}</div>
+                <div className="text-xs text-muted-foreground">{owner?.email ?? k.user_id} · {k.country ?? "—"} · {new Date(k.created_at).toLocaleString()}</div>
+                {k.admin_note && <div className="text-xs text-muted-foreground">Note: {k.admin_note}</div>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={k.status === "approved" ? "default" : k.status === "rejected" ? "destructive" : "secondary"}>{k.status}</Badge>
+                <Button size="sm" variant="outline" onClick={() => openDoc(k.document_url)}><FileText className="mr-1 h-4 w-4" /> View</Button>
+                {k.status === "pending" && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => decide(k.id, "rejected")}><X className="h-4 w-4" /></Button>
+                    <Button size="sm" onClick={() => decide(k.id, "approved")}><Check className="mr-1 h-4 w-4" /> Approve</Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function NewsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const postNews = useServerFn(postAdminNews);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [impact, setImpact] = useState<"low" | "medium" | "high">("medium");
+  const [source, setSource] = useState("Frobex Desk");
+
+  const publish = async () => {
+    if (!title.trim()) return toast.error("Enter a news headline");
+    try {
+      await postNews({ data: { title: title.trim(), body: body.trim(), impact, source: source.trim() || "Frobex Desk" } });
+      toast.success("Market news published");
+      setTitle(""); setBody("");
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not publish news");
+    }
+  };
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+      <Card className="space-y-4 p-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Newspaper className="h-4 w-4 text-primary" /> Publish market news</h2>
+        <div className="space-y-2"><Label>Headline</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={160} /></div>
+        <div className="space-y-2"><Label>Details</Label><Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} /></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2"><Label>Impact</Label><Select value={impact} onValueChange={(v) => setImpact(v as "low" | "medium" | "high")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem></SelectContent></Select></div>
+          <div className="space-y-2"><Label>Source</Label><Input value={source} onChange={(e) => setSource(e.target.value)} maxLength={120} /></div>
+        </div>
+        <Button onClick={publish} className="w-full"><Save className="mr-1.5 h-4 w-4" /> Publish</Button>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-3 text-lg font-semibold">Published ticker</h2>
+        {!items?.length ? <p className="text-sm text-muted-foreground">No news yet.</p> : <div className="space-y-2">{items.map((n: any) => <div key={n.id} className="rounded-lg border border-border bg-surface px-4 py-3 text-sm"><div className="flex items-center gap-2"><Badge variant={n.impact === "high" ? "destructive" : "secondary"}>{n.impact}</Badge><span className="font-semibold">{n.title}</span></div><div className="mt-1 text-xs text-muted-foreground">{n.source ?? "Wire"} · {new Date(n.created_at).toLocaleString()}</div></div>)}</div>}
+      </Card>
+    </div>
+  );
+}
+
 function ComplaintsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
   const updateComplaint = useServerFn(updateAdminComplaint);
 
