@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui/card";
@@ -12,6 +13,19 @@ export const Route = createFileRoute("/_authenticated/transactions")({
 
 function Transactions() {
   const { user } = useAuth();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`account-activity-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${user.id}` }, () => qc.invalidateQueries({ queryKey: ["transactions", user.id] }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "deposits", filter: `user_id=eq.${user.id}` }, () => qc.invalidateQueries({ queryKey: ["activity_deposits", user.id] }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "withdrawals", filter: `user_id=eq.${user.id}` }, () => qc.invalidateQueries({ queryKey: ["activity_withdrawals", user.id] }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "complaints", filter: `user_id=eq.${user.id}` }, () => qc.invalidateQueries({ queryKey: ["activity_complaints", user.id] }))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, qc]);
 
   const txQ = useQuery({
     queryKey: ["transactions", user?.id],
