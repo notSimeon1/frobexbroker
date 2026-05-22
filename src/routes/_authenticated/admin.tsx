@@ -6,8 +6,13 @@ import { useAuth } from "@/lib/auth-context";
 import {
   adjustAdminBalance,
   decideAdminDeposit,
+  decideAdminKyc,
   decideAdminWithdrawal,
+  getAdminKycUrl,
   getAdminOverview,
+  postAdminNews,
+  toggleAdminAccountMode,
+  toggleAdminSuspend,
   updateAdminChart,
   updateAdminComplaint,
   updateAdminSetting,
@@ -19,7 +24,9 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -48,7 +55,7 @@ function AdminPage() {
 
   const overviewQuery = useQuery({
     queryKey: ["admin_overview", user?.id],
-    queryFn: () => fetchOverview({ data: {} }),
+    queryFn: () => fetchOverview(),
     enabled: isAdmin === true,
     refetchInterval: 6000,
     retry: false,
