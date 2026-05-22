@@ -494,6 +494,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      open_position_atomic: {
+        Args: {
+          _account_mode: string
+          _asset: string
+          _entry_price: number
+          _leverage: number
+          _margin: number
+          _quantity: number
+          _side: string
+          _user_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "user"
