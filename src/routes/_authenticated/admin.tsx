@@ -189,6 +189,8 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
 function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
+  const toggleMode = useServerFn(toggleAdminAccountMode);
+  const toggleSuspend = useServerFn(toggleAdminSuspend);
   const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
@@ -216,13 +218,43 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
     }
   };
 
+  const setAccountMode = async (checked: boolean) => {
+    const nextMode = checked ? "live" : "demo";
+    try {
+      await toggleMode({ data: { userId: user.id, mode: nextMode } });
+      toast.success(`Account switched to ${nextMode.toUpperCase()}`);
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not switch account mode");
+    }
+  };
+
+  const setSuspended = async (checked: boolean) => {
+    try {
+      await toggleSuspend({ data: { userId: user.id, suspended: checked } });
+      toast.success(checked ? "Account suspended" : "Account restored");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update suspension");
+    }
+  };
+
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-semibold">{user.full_name ?? "—"}</div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
-          <div className="mt-1 text-sm tabular-nums">Balance: ${Number(user.account_balance).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
+          <div className="mt-1 text-sm tabular-nums">Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: ${Number(user.demo_balance ?? 0).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant={user.account_mode === "live" ? "default" : "secondary"} className={user.account_mode === "live" ? "bg-success text-success-foreground" : ""}>{String(user.account_mode ?? "demo").toUpperCase()}</Badge>
+            <Badge variant={user.kyc_status === "approved" ? "default" : "outline"}>{String(user.kyc_status ?? "none").toUpperCase()} KYC</Badge>
+            {user.is_suspended && <Badge variant="destructive">Suspended</Badge>}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+          <label className="flex items-center justify-between gap-3"><span>Live mode</span><Switch checked={user.account_mode === "live"} onCheckedChange={setAccountMode} /></label>
+          <label className="flex items-center justify-between gap-3"><span className="flex items-center gap-1"><Ban className="h-3 w-3" /> Suspend</span><Switch checked={!!user.is_suspended} onCheckedChange={setSuspended} /></label>
         </div>
       </div>
 
