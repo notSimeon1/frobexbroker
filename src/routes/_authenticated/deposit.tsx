@@ -91,6 +91,13 @@ function DepositPage() {
     });
     setSubmitting(false);
     if (error) { toast.error(error.message); return; }
+    await supabase.from("transactions").insert({
+      user_id: user!.id,
+      type: "deposit_request",
+      amount: amt,
+      asset_name: `Pending deposit ${selected.symbol} ${selected.network}`,
+      status: "pending",
+    });
     toast.success("Deposit submitted — awaiting admin approval");
     setAmount(""); setTxHash(""); refetch();
   };
