@@ -215,7 +215,7 @@ export async function adminToggleSuspend(userId: string, targetUserId: string, s
 
 export async function adminToggleAiTrading(userId: string, targetUserId: string, enabled: boolean) {
   await assertOwner(userId);
-  const { error } = await supabaseAdmin.from("profiles").update({ ai_trading_enabled: enabled, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  const { error } = await (supabaseAdmin as any).from("profiles").update({ ai_trading_enabled: enabled, updated_at: new Date().toISOString() }).eq("id", targetUserId);
   if (error) throw new Error(error.message);
   await writeActivity(targetUserId, "ai_trading", 0, `AI trading ${enabled ? "enabled" : "disabled"} by admin`, "completed");
   return { ok: true };
