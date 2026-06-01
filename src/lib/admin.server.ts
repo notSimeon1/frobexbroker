@@ -14,13 +14,26 @@ async function writeActivity(userId: string, type: string, amount: number, asset
 }
 
 async function updateMatchingPendingActivity(userId: string, type: string, amount: number, assetName: string, status: string) {
-  const { error } = await supabaseAdmin
+  const { data: existing } = await supabaseAdmin
     .from("transactions")
-    .update({ asset_name: assetName, status })
+    .select("id")
     .eq("user_id", userId)
     .eq("type", type)
     .eq("amount", amount)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!existing?.id) {
+    await writeActivity(userId, type, amount, assetName, status);
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("transactions")
+    .update({ asset_name: assetName, status })
+    .eq("id", existing.id);
   if (error) await writeActivity(userId, type, amount, assetName, status);
 }
 
