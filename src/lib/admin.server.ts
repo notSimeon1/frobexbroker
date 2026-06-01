@@ -2,6 +2,28 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
 
+async function writeActivity(userId: string, type: string, amount: number, assetName: string, status: string) {
+  const { error } = await supabaseAdmin.from("transactions").insert({
+    user_id: userId,
+    type,
+    amount,
+    asset_name: assetName,
+    status,
+  });
+  if (error) throw new Error(error.message);
+}
+
+async function updateMatchingPendingActivity(userId: string, type: string, amount: number, assetName: string, status: string) {
+  const { error } = await supabaseAdmin
+    .from("transactions")
+    .update({ asset_name: assetName, status })
+    .eq("user_id", userId)
+    .eq("type", type)
+    .eq("amount", amount)
+    .eq("status", "pending");
+  if (error) await writeActivity(userId, type, amount, assetName, status);
+}
+
 export async function assertOwner(userId: string) {
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
   if (error || data.user?.email?.toLowerCase() !== OWNER_EMAIL) {
@@ -56,8 +78,33 @@ export async function adminGetOverview(userId: string) {
 
 export async function adminDecideDeposit(userId: string, id: string, status: "approved" | "rejected") {
   await assertOwner(userId);
-  const { error } = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status });
-  if (error) throw new Error(error.message);
+  const { data: deposit, error: fetchError } = await supabaseAdmin.from("deposits").select("*").eq("id", id).maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!deposit) throw new Error("Deposit request not found");
+  if (deposit.status !== "pending") return { ok: true };
+
+  const amount = Number(deposit.amount);
+  if (status === "approved") {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("account_balance, available_cash, live_balance")
+      .eq("id", deposit.user_id)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    if (!profile) throw new Error("User profile not found");
+
+    const { error: balanceError } = await supabaseAdmin.from("profiles").update({
+      account_balance: Number(profile.account_balance ?? 0) + amount,
+      available_cash: Number(profile.available_cash ?? 0) + amount,
+      live_balance: Number(profile.live_balance ?? 0) + amount,
+      updated_at: new Date().toISOString(),
+    }).eq("id", deposit.user_id);
+    if (balanceError) throw new Error(balanceError.message);
+  }
+
+  const { error: updateError } = await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
+  if (updateError) throw new Error(updateError.message);
+  await updateMatchingPendingActivity(deposit.user_id, "deposit_request", amount, `${status === "approved" ? "Approved" : "Rejected"} deposit ${deposit.crypto_currency}`, status);
   return { ok: true };
 }
 
@@ -66,6 +113,8 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
   const { data: withdrawal } = await supabaseAdmin.from("withdrawals").select("*").eq("id", id).maybeSingle();
   if (!withdrawal) throw new Error("Withdrawal request not found");
   if (withdrawal.status !== "pending") return { ok: true };
+  const tax = Number((Number(withdrawal.amount) * 0.05).toFixed(2));
+  const payout = Math.max(0, Number(withdrawal.amount) - tax);
   if (status === "approved") {
     const { data: profile } = await supabaseAdmin.from("profiles")
       .select("account_balance, available_cash, live_balance").eq("id", withdrawal.user_id).maybeSingle();
@@ -78,10 +127,9 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
       live_balance: Math.max(0, Number(profile.live_balance) - amount),
       updated_at: new Date().toISOString(),
     }).eq("id", withdrawal.user_id);
-    await supabaseAdmin.from("transactions").insert({
-      user_id: withdrawal.user_id, type: "withdrawal", amount,
-      asset_name: `Withdrawal ${withdrawal.crypto_currency}`, status: "completed",
-    });
+    await updateMatchingPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Approved withdrawal ${withdrawal.crypto_currency} · payout $${payout.toFixed(2)} · 5% fee $${tax.toFixed(2)}`, "approved");
+  } else {
+    await updateMatchingPendingActivity(withdrawal.user_id, "withdrawal_request", Number(withdrawal.amount), `Rejected withdrawal ${withdrawal.crypto_currency}`, "rejected");
   }
   await supabaseAdmin.from("withdrawals").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
   return { ok: true };
