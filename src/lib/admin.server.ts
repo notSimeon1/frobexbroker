@@ -213,6 +213,14 @@ export async function adminToggleSuspend(userId: string, targetUserId: string, s
   return { ok: true };
 }
 
+export async function adminToggleAiTrading(userId: string, targetUserId: string, enabled: boolean) {
+  await assertOwner(userId);
+  const { error } = await supabaseAdmin.from("profiles").update({ ai_trading_enabled: enabled, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  if (error) throw new Error(error.message);
+  await writeActivity(targetUserId, "ai_trading", 0, `AI trading ${enabled ? "enabled" : "disabled"} by admin`, "completed");
+  return { ok: true };
+}
+
 export async function adminDecideKyc(userId: string, id: string, status: "approved" | "rejected", note?: string) {
   await assertOwner(userId);
   const { data: row } = await supabaseAdmin.from("kyc_submissions").select("user_id").eq("id", id).maybeSingle();
