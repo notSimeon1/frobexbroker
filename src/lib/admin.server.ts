@@ -53,7 +53,7 @@ async function writeActivity(userId: string, type: string, amount: number, asset
 }
 
 async function syncPendingActivity(userId: string, type: string, amount: number, assetName: string, status: string, sourceTable: string, sourceId: string) {
-  const { data: sourced } = await supabaseAdmin
+  const { data: sourced } = await (supabaseAdmin as any)
     .from("transactions")
     .select("id")
     .eq("source_table", sourceTable)
@@ -101,7 +101,7 @@ async function updateProfileBalance(userId: string, profile: BalanceColumns, del
   if (money(next.account_balance) < 0 || money(next.available_cash) < 0 || money(next.demo_balance) < 0) {
     throw new Error("This would make the user's balance negative");
   }
-  const { error } = await supabaseAdmin.from("profiles").update(next).eq("id", userId);
+  const { error } = await (supabaseAdmin as any).from("profiles").update(next).eq("id", userId);
   if (error) throw new Error(error.message);
 }
 
@@ -135,8 +135,8 @@ export async function adminGetOverview(userId: string) {
     const { data } = await supabaseAdmin.auth.admin.getUserById(profile.id);
     return {
       ...profile,
-      country: profile.country ?? "Australia",
-      ai_trading_enabled: Boolean(profile.ai_trading_enabled),
+      country: (profile as any).country ?? "Australia",
+      ai_trading_enabled: Boolean((profile as any).ai_trading_enabled),
       email: data.user?.email ?? null,
       last_sign_in_at: data.user?.last_sign_in_at ?? null,
     };
