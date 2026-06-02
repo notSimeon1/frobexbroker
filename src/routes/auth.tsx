@@ -29,6 +29,7 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [country, setCountry] = useState("Australia");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ function AuthPage() {
           email, password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: fullName },
+            data: { full_name: fullName, country },
           },
         });
         if (error) throw error;
@@ -88,6 +89,10 @@ function AuthPage() {
                 <div>
                   <Label htmlFor="name">Full name</Label>
                   <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ada Lovelace" required={tab === "signup"} maxLength={80} />
+                </div>
+                <div>
+                  <Label htmlFor="country">Country</Label>
+                  <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Australia" required={tab === "signup"} maxLength={80} />
                 </div>
               </TabsContent>
               <div>
