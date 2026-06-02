@@ -11,6 +11,7 @@ import {
   getAdminKycUrl,
   getAdminOverview,
   postAdminNews,
+  toggleAdminAiTrading,
   toggleAdminAccountMode,
   toggleAdminSuspend,
   updateAdminChart,
@@ -191,6 +192,7 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
   const adjustBalance = useServerFn(adjustAdminBalance);
   const toggleMode = useServerFn(toggleAdminAccountMode);
   const toggleSuspend = useServerFn(toggleAdminSuspend);
+  const toggleAiTrading = useServerFn(toggleAdminAiTrading);
   const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
@@ -239,21 +241,34 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
     }
   };
 
+  const setAiTrading = async (checked: boolean) => {
+    try {
+      await toggleAiTrading({ data: { userId: user.id, enabled: checked } });
+      toast.success(checked ? "AI trading enabled" : "AI trading disabled");
+      await onChange();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update AI trading");
+    }
+  };
+
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-semibold">{user.full_name ?? "—"}</div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
+          <div className="text-xs text-muted-foreground">Country: {user.country ?? "Australia"}</div>
           <div className="mt-1 text-sm tabular-nums">Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: ${Number(user.demo_balance ?? 0).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge variant={user.account_mode === "live" ? "default" : "secondary"} className={user.account_mode === "live" ? "bg-success text-success-foreground" : ""}>{String(user.account_mode ?? "demo").toUpperCase()}</Badge>
             <Badge variant={user.kyc_status === "approved" ? "default" : "outline"}>{String(user.kyc_status ?? "none").toUpperCase()} KYC</Badge>
+            <Badge variant={user.ai_trading_enabled ? "default" : "outline"}>{user.ai_trading_enabled ? "AI ON" : "AI OFF"}</Badge>
             {user.is_suspended && <Badge variant="destructive">Suspended</Badge>}
           </div>
         </div>
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
           <label className="flex items-center justify-between gap-3"><span>Live mode</span><Switch checked={user.account_mode === "live"} onCheckedChange={setAccountMode} /></label>
+          <label className="flex items-center justify-between gap-3"><span>AI trading</span><Switch checked={!!user.ai_trading_enabled} onCheckedChange={setAiTrading} /></label>
           <label className="flex items-center justify-between gap-3"><span className="flex items-center gap-1"><Ban className="h-3 w-3" /> Suspend</span><Switch checked={!!user.is_suspended} onCheckedChange={setSuspended} /></label>
         </div>
       </div>

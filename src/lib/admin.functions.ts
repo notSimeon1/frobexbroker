@@ -9,6 +9,7 @@ import {
   adminGetKycDocumentUrl,
   adminGetOverview,
   adminPostNews,
+  adminToggleAiTrading,
   adminToggleAccountMode,
   adminToggleSuspend,
   adminUpdateChart,
@@ -25,6 +26,7 @@ const complaintSchema = z.object({ id: z.string().uuid(), status: z.enum(["pendi
 const settingSchema = z.object({ key: z.string().min(1).max(80), value: z.string().min(1).max(300) });
 const modeSchema = z.object({ userId: z.string().uuid(), mode: z.enum(["demo", "live"]) });
 const suspendSchema = z.object({ userId: z.string().uuid(), suspended: z.boolean() });
+const aiTradingSchema = z.object({ userId: z.string().uuid(), enabled: z.boolean() });
 const kycSchema = z.object({ id: z.string().uuid(), status: z.enum(["approved", "rejected"]), note: z.string().max(500).optional() });
 const newsSchema = z.object({
   title: z.string().min(1).max(160),
@@ -87,6 +89,11 @@ export const toggleAdminSuspend = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => suspendSchema.parse(input))
   .handler(async ({ data, context }) => adminToggleSuspend(context.userId, data.userId, data.suspended));
+
+export const toggleAdminAiTrading = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => aiTradingSchema.parse(input))
+  .handler(async ({ data, context }) => adminToggleAiTrading(context.userId, data.userId, data.enabled));
 
 export const decideAdminKyc = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

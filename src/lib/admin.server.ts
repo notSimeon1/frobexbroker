@@ -1,40 +1,108 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const OWNER_EMAIL = "simonosawaru255@gmail.com";
+const DEFAULT_FEE_WALLET = "0x8B911165295C78935F53753e9D8DBC566104C514";
 
-async function writeActivity(userId: string, type: string, amount: number, assetName: string, status: string) {
-  const { error } = await supabaseAdmin.from("transactions").insert({
-    user_id: userId,
-    type,
-    amount,
-    asset_name: assetName,
-    status,
-  });
-  if (error) throw new Error(error.message);
+type AdminStatus = "approved" | "rejected";
+type BalanceColumns = {
+  account_balance?: number | string | null;
+  available_cash?: number | string | null;
+  live_balance?: number | string | null;
+  demo_balance?: number | string | null;
+};
+
+function money(value: unknown) {
+  return Number(Number(value ?? 0).toFixed(2));
 }
 
-async function updateMatchingPendingActivity(userId: string, type: string, amount: number, assetName: string, status: string) {
-  const { data: existing } = await supabaseAdmin
+function asError(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error) return String((error as { message?: string }).message ?? fallback);
+  return fallback;
+}
+
+async function getSetting(key: string, fallback = DEFAULT_FEE_WALLET) {
+  const { data } = await supabaseAdmin.from("app_settings").select("value").eq("key", key).maybeSingle();
+  return data?.value ?? fallback;
+}
+
+async function writeActivity(userId: string, type: string, amount: number, assetName: string, status: string, sourceTable?: string, sourceId?: string) {
+  const row = {
+    user_id: userId,
+    type,
+    amount: money(amount),
+    asset_name: assetName,
+    status,
+    ...(sourceTable && sourceId ? { source_table: sourceTable, source_id: sourceId } : {}),
+  };
+
+  const { error } = await supabaseAdmin.from("transactions").upsert(row as never, {
+    onConflict: sourceTable && sourceId ? "source_table,source_id,type" : "id",
+    ignoreDuplicates: false,
+  });
+
+  if (error) {
+    const { error: insertError } = await supabaseAdmin.from("transactions").insert({
+      user_id: userId,
+      type,
+      amount: money(amount),
+      asset_name: assetName,
+      status,
+    });
+    if (insertError) throw new Error(insertError.message);
+  }
+}
+
+async function syncPendingActivity(userId: string, type: string, amount: number, assetName: string, status: string, sourceTable: string, sourceId: string) {
+  const { data: sourced } = await (supabaseAdmin as any)
+    .from("transactions")
+    .select("id")
+    .eq("source_table", sourceTable)
+    .eq("source_id", sourceId)
+    .eq("type", type)
+    .maybeSingle();
+
+  if (sourced?.id) {
+    const { error } = await supabaseAdmin.from("transactions").update({ asset_name: assetName, status }).eq("id", sourced.id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { data: pending } = await supabaseAdmin
     .from("transactions")
     .select("id")
     .eq("user_id", userId)
     .eq("type", type)
-    .eq("amount", amount)
+    .eq("amount", money(amount))
     .eq("status", "pending")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (!existing?.id) {
-    await writeActivity(userId, type, amount, assetName, status);
+  if (pending?.id) {
+    const { error } = await supabaseAdmin
+      .from("transactions")
+      .update({ asset_name: assetName, status, source_table: sourceTable, source_id: sourceId } as never)
+      .eq("id", pending.id);
+    if (error) throw new Error(error.message);
     return;
   }
 
-  const { error } = await supabaseAdmin
-    .from("transactions")
-    .update({ asset_name: assetName, status })
-    .eq("id", existing.id);
-  if (error) await writeActivity(userId, type, amount, assetName, status);
+  await writeActivity(userId, type, amount, assetName, status, sourceTable, sourceId);
+}
+
+async function updateProfileBalance(userId: string, profile: BalanceColumns, delta: number, mode: "live" | "demo" | "both" = "live") {
+  const next: Record<string, number | string> = { updated_at: new Date().toISOString() };
+  if (mode === "live" || mode === "both") {
+    next.account_balance = money(profile.account_balance) + delta;
+    next.available_cash = money(profile.available_cash) + delta;
+    next.live_balance = Math.max(0, money(profile.live_balance) + delta);
+  }
+  if (mode === "demo" || mode === "both") next.demo_balance = Math.max(0, money(profile.demo_balance) + delta);
+  if (money(next.account_balance) < 0 || money(next.available_cash) < 0 || money(next.demo_balance) < 0) {
+    throw new Error("This would make the user's balance negative");
+  }
+  const { error } = await (supabaseAdmin as any).from("profiles").update(next).eq("id", userId);
+  if (error) throw new Error(error.message);
 }
 
 export async function assertOwner(userId: string) {
@@ -46,150 +114,165 @@ export async function assertOwner(userId: string) {
 
 export async function adminGetOverview(userId: string) {
   await assertOwner(userId);
-  const [
-    { data: profiles },
-    { data: deposits },
-    { data: withdrawals },
-    { data: complaints },
-    { data: settings },
-    { data: transactions },
-    { data: kyc },
-    { data: referrals },
-    { data: positions },
-    { data: news },
-  ] = await Promise.all([
+  const [profilesRes, depositsRes, withdrawalsRes, complaintsRes, settingsRes, transactionsRes, kycRes, referralsRes, positionsRes, newsRes] = await Promise.all([
     supabaseAdmin.from("profiles").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("deposits").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("withdrawals").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("complaints").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("app_settings").select("*"),
-    supabaseAdmin.from("transactions").select("*").order("created_at", { ascending: false }).limit(200),
+    supabaseAdmin.from("transactions").select("*").order("created_at", { ascending: false }).limit(300),
     supabaseAdmin.from("kyc_submissions").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("referral_earnings").select("*").order("created_at", { ascending: false }),
     supabaseAdmin.from("live_positions").select("*").order("opened_at", { ascending: false }).limit(200),
     supabaseAdmin.from("market_news").select("*").order("created_at", { ascending: false }).limit(50),
   ]);
 
-  const users = await Promise.all((profiles ?? []).map(async (profile) => {
+  for (const res of [profilesRes, depositsRes, withdrawalsRes, complaintsRes, settingsRes, transactionsRes, kycRes, referralsRes, positionsRes, newsRes]) {
+    if (res.error) throw new Error(res.error.message);
+  }
+
+  const users = await Promise.all((profilesRes.data ?? []).map(async (profile) => {
     const { data } = await supabaseAdmin.auth.admin.getUserById(profile.id);
-    return { ...profile, email: data.user?.email ?? null, last_sign_in_at: data.user?.last_sign_in_at ?? null };
+    return {
+      ...profile,
+      country: (profile as any).country ?? "Australia",
+      ai_trading_enabled: Boolean((profile as any).ai_trading_enabled),
+      email: data.user?.email ?? null,
+      last_sign_in_at: data.user?.last_sign_in_at ?? null,
+    };
   }));
 
   return {
     users,
-    deposits: deposits ?? [],
-    withdrawals: withdrawals ?? [],
-    complaints: complaints ?? [],
-    settings: settings ?? [],
-    transactions: transactions ?? [],
-    kyc: kyc ?? [],
-    referrals: referrals ?? [],
-    positions: positions ?? [],
-    news: news ?? [],
+    deposits: depositsRes.data ?? [],
+    withdrawals: withdrawalsRes.data ?? [],
+    complaints: complaintsRes.data ?? [],
+    settings: settingsRes.data ?? [],
+    transactions: transactionsRes.data ?? [],
+    kyc: kycRes.data ?? [],
+    referrals: referralsRes.data ?? [],
+    positions: positionsRes.data ?? [],
+    news: newsRes.data ?? [],
   };
 }
 
-export async function adminDecideDeposit(userId: string, id: string, status: "approved" | "rejected") {
+export async function adminDecideDeposit(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
+
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status });
+  if (!rpc.error) return { ok: true };
+
   const { data: deposit, error: fetchError } = await supabaseAdmin.from("deposits").select("*").eq("id", id).maybeSingle();
   if (fetchError) throw new Error(fetchError.message);
   if (!deposit) throw new Error("Deposit request not found");
   if (deposit.status !== "pending") return { ok: true };
 
-  const amount = Number(deposit.amount);
+  const amount = money(deposit.amount);
   if (status === "approved") {
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("account_balance, available_cash, live_balance")
+      .select("account_balance, available_cash, live_balance, referred_by")
       .eq("id", deposit.user_id)
       .maybeSingle();
     if (profileError) throw new Error(profileError.message);
     if (!profile) throw new Error("User profile not found");
 
-    const { error: balanceError } = await supabaseAdmin.from("profiles").update({
-      account_balance: Number(profile.account_balance ?? 0) + amount,
-      available_cash: Number(profile.available_cash ?? 0) + amount,
-      live_balance: Number(profile.live_balance ?? 0) + amount,
-      updated_at: new Date().toISOString(),
-    }).eq("id", deposit.user_id);
-    if (balanceError) throw new Error(balanceError.message);
-  }
+    const { error: updateError } = await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
+    if (updateError) throw new Error(updateError.message);
 
-  const { error: updateError } = await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
-  if (updateError) throw new Error(updateError.message);
-  await updateMatchingPendingActivity(deposit.user_id, "deposit_request", amount, `${status === "approved" ? "Approved" : "Rejected"} deposit ${deposit.crypto_currency}`, status);
+    await updateProfileBalance(deposit.user_id, profile, amount, "live");
+    await syncPendingActivity(deposit.user_id, "deposit_request", amount, `Approved deposit ${deposit.crypto_currency}`, "approved", "deposits", deposit.id);
+
+    if (profile.referred_by) {
+      const bonus = money(amount * 0.2);
+      const { data: referrer } = await supabaseAdmin.from("profiles").select("account_balance, available_cash, live_balance").eq("id", profile.referred_by).maybeSingle();
+      if (referrer) await updateProfileBalance(profile.referred_by, referrer, bonus, "live");
+      await supabaseAdmin.from("referral_earnings").insert({ referrer_id: profile.referred_by, referred_user_id: deposit.user_id, deposit_id: deposit.id, amount: bonus });
+      await writeActivity(profile.referred_by, "referral_bonus", bonus, "Referral commission (20%)", "completed", "deposits", deposit.id);
+    }
+  } else {
+    const { error: updateError } = await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
+    if (updateError) throw new Error(updateError.message);
+    await syncPendingActivity(deposit.user_id, "deposit_request", amount, `Rejected deposit ${deposit.crypto_currency}`, "rejected", "deposits", deposit.id);
+  }
   return { ok: true };
 }
 
-export async function adminDecideWithdrawal(userId: string, id: string, status: "approved" | "rejected") {
+export async function adminDecideWithdrawal(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
-  const { data: withdrawal } = await supabaseAdmin.from("withdrawals").select("*").eq("id", id).maybeSingle();
+  const feeWallet = await getSetting("deposit_wallet_usdt_bep20");
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", { _withdrawal_id: id, _status: status, _fee_wallet: feeWallet });
+  if (!rpc.error) return { ok: true };
+
+  const { data: withdrawal, error: fetchError } = await supabaseAdmin.from("withdrawals").select("*").eq("id", id).maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
   if (!withdrawal) throw new Error("Withdrawal request not found");
   if (withdrawal.status !== "pending") return { ok: true };
-  const tax = Number((Number(withdrawal.amount) * 0.05).toFixed(2));
-  const payout = Math.max(0, Number(withdrawal.amount) - tax);
+
+  const amount = money(withdrawal.amount);
+  const tax = money(amount * 0.05);
+  const payout = Math.max(0, money(amount - tax));
+
   if (status === "approved") {
-    const { data: profile } = await supabaseAdmin.from("profiles")
-      .select("account_balance, available_cash, live_balance").eq("id", withdrawal.user_id).maybeSingle();
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("account_balance, available_cash, live_balance")
+      .eq("id", withdrawal.user_id)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
     if (!profile) throw new Error("User profile not found");
-    const amount = Number(withdrawal.amount);
-    if (Number(profile.available_cash) < amount) throw new Error("User has insufficient available cash");
-    await supabaseAdmin.from("profiles").update({
-      account_balance: Number(profile.account_balance) - amount,
-      available_cash: Number(profile.available_cash) - amount,
-      live_balance: Math.max(0, Number(profile.live_balance) - amount),
-      updated_at: new Date().toISOString(),
-    }).eq("id", withdrawal.user_id);
-    await updateMatchingPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Approved withdrawal ${withdrawal.crypto_currency} · payout $${payout.toFixed(2)} · 5% fee $${tax.toFixed(2)}`, "approved");
+    if (money(profile.available_cash) < amount) throw new Error("User has insufficient available cash");
+
+    const { error: updateError } = await supabaseAdmin.from("withdrawals").update({
+      status,
+      reviewed_at: new Date().toISOString(),
+      tax_fee: tax,
+      payout_amount: payout,
+      fee_wallet_address: feeWallet,
+    } as never).eq("id", id).eq("status", "pending");
+    if (updateError) throw new Error(updateError.message);
+
+    await updateProfileBalance(withdrawal.user_id, profile, -amount, "live");
+    await syncPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Approved withdrawal ${withdrawal.crypto_currency} · payout $${payout.toFixed(2)} · 5% tax fee $${tax.toFixed(2)}`, "approved", "withdrawals", withdrawal.id);
+    await writeActivity(withdrawal.user_id, "withdrawal_tax_fee", tax, `5% withdrawal tax paid to ${feeWallet}`, "completed", "withdrawals", withdrawal.id);
   } else {
-    await updateMatchingPendingActivity(withdrawal.user_id, "withdrawal_request", Number(withdrawal.amount), `Rejected withdrawal ${withdrawal.crypto_currency}`, "rejected");
+    const { error: updateError } = await supabaseAdmin.from("withdrawals").update({ status, reviewed_at: new Date().toISOString(), tax_fee: tax, payout_amount: payout, fee_wallet_address: feeWallet } as never).eq("id", id).eq("status", "pending");
+    if (updateError) throw new Error(updateError.message);
+    await syncPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Rejected withdrawal ${withdrawal.crypto_currency}`, "rejected", "withdrawals", withdrawal.id);
   }
-  await supabaseAdmin.from("withdrawals").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id);
   return { ok: true };
 }
 
 export async function adminUpdateChart(userId: string, targetUserId: string, mode: "profit" | "loss" | "flat", intensity: number) {
   await assertOwner(userId);
-  await supabaseAdmin.from("profiles").update({
-    chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString(),
-  }).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  if (error) throw new Error(error.message);
+  await writeActivity(targetUserId, "chart_control", 0, `Admin set chart to ${mode.toUpperCase()} intensity ${intensity}`, "completed");
   return { ok: true };
 }
 
 export async function adminAdjustBalance(userId: string, targetUserId: string, amount: number, direction: "credit" | "debit") {
   await assertOwner(userId);
-  const { data: profile } = await supabaseAdmin.from("profiles")
-    .select("account_balance, available_cash, live_balance").eq("id", targetUserId).maybeSingle();
+  const { data: profile, error } = await supabaseAdmin.from("profiles").select("account_balance, available_cash, live_balance").eq("id", targetUserId).maybeSingle();
+  if (error) throw new Error(error.message);
   if (!profile) throw new Error("User profile not found");
-  const signed = direction === "credit" ? amount : -amount;
-  const newBalance = Number(profile.account_balance) + signed;
-  const newCash = Number(profile.available_cash) + signed;
-  if (newBalance < 0 || newCash < 0) throw new Error("This adjustment would make the balance negative");
-  await supabaseAdmin.from("profiles").update({
-    account_balance: newBalance,
-    available_cash: newCash,
-    live_balance: Math.max(0, Number(profile.live_balance) + signed),
-    updated_at: new Date().toISOString(),
-  }).eq("id", targetUserId);
-  await supabaseAdmin.from("transactions").insert({
-    user_id: targetUserId,
-    type: direction === "credit" ? "margin_bonus" : "admin_debit",
-    amount,
-    asset_name: direction === "credit" ? "Margin bonus credit" : "Admin balance debit",
-    status: "completed",
-  });
+  const signed = direction === "credit" ? money(amount) : -money(amount);
+  await updateProfileBalance(targetUserId, profile, signed, "live");
+  await writeActivity(targetUserId, direction === "credit" ? "admin_credit" : "admin_debit", money(amount), direction === "credit" ? "Admin balance credit" : "Admin balance debit", "completed");
   return { ok: true };
 }
 
 export async function adminUpdateComplaint(userId: string, id: string, status: "pending" | "resolved") {
   await assertOwner(userId);
-  await supabaseAdmin.from("complaints").update({ status }).eq("id", id);
+  const { error } = await supabaseAdmin.from("complaints").update({ status }).eq("id", id);
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
 export async function adminUpdateSetting(userId: string, key: string, value: string) {
   await assertOwner(userId);
-  await supabaseAdmin.from("app_settings").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  const { error } = await supabaseAdmin.from("app_settings").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
@@ -197,42 +280,43 @@ export async function adminToggleAccountMode(userId: string, targetUserId: strin
   await assertOwner(userId);
   const { error } = await supabaseAdmin.from("profiles").update({ account_mode: mode, updated_at: new Date().toISOString() }).eq("id", targetUserId);
   if (error) throw new Error(error.message);
-  await supabaseAdmin.from("transactions").insert({
-    user_id: targetUserId,
-    type: "account_mode",
-    amount: 0,
-    asset_name: `Account switched to ${mode.toUpperCase()}`,
-    status: "completed",
-  });
+  await writeActivity(targetUserId, "account_mode", 0, `Account switched to ${mode.toUpperCase()}`, "completed");
   return { ok: true };
 }
 
 export async function adminToggleSuspend(userId: string, targetUserId: string, suspended: boolean) {
   await assertOwner(userId);
-  await supabaseAdmin.from("profiles").update({ is_suspended: suspended, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ is_suspended: suspended, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  if (error) throw new Error(error.message);
+  await writeActivity(targetUserId, "account_status", 0, suspended ? "Account suspended by admin" : "Account restored by admin", "completed");
   return { ok: true };
 }
 
 export async function adminToggleAiTrading(userId: string, targetUserId: string, enabled: boolean) {
   await assertOwner(userId);
-  const { error } = await (supabaseAdmin as any).from("profiles").update({ ai_trading_enabled: enabled, updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ ai_trading_enabled: enabled, updated_at: new Date().toISOString() } as never).eq("id", targetUserId);
   if (error) throw new Error(error.message);
-  await writeActivity(targetUserId, "ai_trading", 0, `AI trading ${enabled ? "enabled" : "disabled"} by admin`, "completed");
+  await writeActivity(targetUserId, "ai_trading", 0, `AI trading ${enabled ? "enabled" : "disabled"}`, "completed");
   return { ok: true };
 }
 
-export async function adminDecideKyc(userId: string, id: string, status: "approved" | "rejected", note?: string) {
+export async function adminDecideKyc(userId: string, id: string, status: AdminStatus, note?: string) {
   await assertOwner(userId);
-  const { data: row } = await supabaseAdmin.from("kyc_submissions").select("user_id").eq("id", id).maybeSingle();
+  const { data: row, error: fetchError } = await supabaseAdmin.from("kyc_submissions").select("user_id").eq("id", id).maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
   if (!row) throw new Error("KYC submission not found");
-  await supabaseAdmin.from("kyc_submissions").update({ status, admin_note: note ?? null, reviewed_at: new Date().toISOString() }).eq("id", id);
-  await supabaseAdmin.from("profiles").update({ kyc_status: status, updated_at: new Date().toISOString() }).eq("id", row.user_id);
+  const { error } = await supabaseAdmin.from("kyc_submissions").update({ status, admin_note: note ?? null, reviewed_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw new Error(error.message);
+  const { error: profileError } = await supabaseAdmin.from("profiles").update({ kyc_status: status, updated_at: new Date().toISOString() }).eq("id", row.user_id);
+  if (profileError) throw new Error(profileError.message);
+  await writeActivity(row.user_id, "kyc", 0, `KYC ${status}`, status);
   return { ok: true };
 }
 
 export async function adminPostNews(userId: string, title: string, body: string, impact: "low" | "medium" | "high", source: string) {
   await assertOwner(userId);
-  await supabaseAdmin.from("market_news").insert({ title, body, impact, source });
+  const { error } = await supabaseAdmin.from("market_news").insert({ title, body, impact, source });
+  if (error) throw new Error(error.message);
   return { ok: true };
 }
 
@@ -243,40 +327,21 @@ export async function adminGetKycDocumentUrl(userId: string, path: string) {
   return { url: data.signedUrl };
 }
 
-export async function openUserPosition(
-  userId: string,
-  asset: string,
-  side: "buy" | "sell",
-  quantity: number,
-  leverage: number,
-  margin: number,
-  entryPrice: number,
-  accountMode: "demo" | "live",
-) {
-  const { data, error } = await (supabaseAdmin as any).rpc("open_position_atomic", {
-    _user_id: userId,
-    _asset: asset,
-    _side: side,
-    _quantity: quantity,
-    _leverage: leverage,
-    _margin: margin,
-    _entry_price: entryPrice,
-    _account_mode: accountMode,
-  });
+export async function openUserPosition(userId: string, asset: string, side: "buy" | "sell", quantity: number, leverage: number, margin: number, entryPrice: number, accountMode: "demo" | "live") {
+  const { data, error } = await (supabaseAdmin as any).rpc("open_position_atomic", { _user_id: userId, _asset: asset, _side: side, _quantity: quantity, _leverage: leverage, _margin: margin, _entry_price: entryPrice, _account_mode: accountMode });
   if (error) throw new Error(error.message);
   return { id: data as string };
 }
 
 export async function closeUserPosition(userId: string, positionId: string, closePrice: number) {
-  const { data: position, error: posErr } = await supabaseAdmin
-    .from("live_positions")
-    .select("user_id")
-    .eq("id", positionId)
-    .maybeSingle();
+  const { data: position, error: posErr } = await supabaseAdmin.from("live_positions").select("user_id").eq("id", positionId).maybeSingle();
   if (posErr) throw new Error(posErr.message);
   if (!position || position.user_id !== userId) throw new Error("Position not found");
-
   const { data, error } = await (supabaseAdmin as any).rpc("close_position_atomic", { _position_id: positionId, _close_price: closePrice });
   if (error) throw new Error(error.message);
   return { pnl: Number(data ?? 0) };
+}
+
+export function getAdminServerErrorMessage(error: unknown) {
+  return asError(error, "Admin action failed");
 }
