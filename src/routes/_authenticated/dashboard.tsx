@@ -260,8 +260,76 @@ function Dashboard() {
         <OrderBook price={lastPrice} />
       </div>
 
+      <RecentActivity userId={user?.id} />
+
       <NewsTicker />
     </div>
+  );
+}
+
+function RecentActivity({ userId }: { userId?: string }) {
+  const { data } = useQuery({
+    queryKey: ["recent_tx", userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("created_at", { ascending: false })
+        .limit(8);
+      return data ?? [];
+    },
+    enabled: !!userId,
+    refetchInterval: 6000,
+  });
+  return (
+    <Card className="p-4 sm:p-6">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Recent activity</h2>
+        <Link to="/transactions" className="text-xs text-primary hover:underline flex items-center gap-1">View all <ArrowRight className="h-3 w-3" /></Link>
+      </div>
+      {!data?.length ? (
+        <p className="text-sm text-muted-foreground">No activity yet — deposit funds to get started.</p>
+      ) : (
+        <div className="space-y-1.5">
+          <AnimatePresence initial={false}>
+            {data.map((t: any) => {
+              const isCredit = ["deposit", "admin_credit", "referral_bonus", "trade_profit"].includes(t.type);
+              const isDebit = ["withdrawal_request", "admin_debit", "trade_loss", "trade_open", "withdrawal_tax_fee"].includes(t.type);
+              const amt = Number(t.amount);
+              return (
+                <motion.div
+                  key={t.id}
+                  layout
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isCredit ? "bg-success/15 text-success" : isDebit ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                      {isCredit ? <ArrowDownToLine className="h-4 w-4" /> : isDebit ? <ArrowUpFromLine className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs sm:text-sm font-medium">{t.asset_name ?? t.type}</div>
+                      <div className="text-[10px] text-muted-foreground">{new Date(t.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {amt > 0 && (
+                      <div className={`tabular-nums text-sm font-semibold ${isCredit ? "text-success" : isDebit ? "text-destructive" : ""}`}>
+                        {isCredit ? "+" : isDebit ? "−" : ""}${amt.toFixed(2)}
+                      </div>
+                    )}
+                    <Badge variant="outline" className="text-[9px] uppercase">{t.status}</Badge>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
+    </Card>
   );
 }
 
