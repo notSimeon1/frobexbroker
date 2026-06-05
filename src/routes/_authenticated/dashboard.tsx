@@ -265,16 +265,17 @@ function Dashboard() {
   );
 }
 
-function BalanceCard({ label, value, Icon, accent }: { label: string; value: number; Icon: any; accent?: "success" | "muted" }) {
+function BalanceCard({ label, value, Icon, accent, active }: { label: string; value: number; Icon: any; accent?: "success" | "muted"; active?: boolean }) {
   return (
-    <Card className="p-5">
+    <Card className={`p-4 transition-all ${active ? "border-primary/60 shadow-glow bg-accent/30" : ""}`}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className={`h-4 w-4 ${accent === "success" ? "text-success" : accent === "muted" ? "text-muted-foreground" : "text-primary"}`} />
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+        <Icon className={`h-3.5 w-3.5 ${accent === "success" ? "text-success" : accent === "muted" ? "text-muted-foreground" : "text-primary"}`} />
       </div>
-      <div className="mt-2 text-2xl font-bold tabular-nums">
+      <div className="mt-1.5 text-lg sm:text-xl font-bold tabular-nums">
         ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </div>
+      {active && <div className="mt-1 text-[10px] font-semibold text-primary">● ACTIVE</div>}
     </Card>
   );
 }
