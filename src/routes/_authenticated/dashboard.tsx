@@ -92,10 +92,25 @@ function Dashboard() {
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
-      .channel(`profile-live-${user.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, () => {
+      .channel(`user-live-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, () => {
         qc.invalidateQueries({ queryKey: ["profile", user.id] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        qc.invalidateQueries({ queryKey: ["recent_tx", user.id] });
         qc.invalidateQueries({ queryKey: ["transactions", user.id] });
+        const row = payload?.new;
+        if (payload.eventType === "INSERT" && row && Number(row.amount) > 0) {
+          const isCredit = ["deposit", "admin_credit", "referral_bonus", "trade_profit"].includes(row.type);
+          if (isCredit) toast.success(`+$${Number(row.amount).toFixed(2)} · ${row.asset_name ?? row.type}`);
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "deposits", filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        qc.invalidateQueries({ queryKey: ["my_deposits", user.id] });
+        const row = payload?.new;
+        if (payload.eventType === "UPDATE" && row?.status === "approved") {
+          toast.success(`Deposit approved — $${Number(row.amount).toFixed(2)} credited to live balance`);
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -105,7 +120,27 @@ function Dashboard() {
   const intensity = Number(profile?.chart_intensity ?? 1);
   const seed = Number(profile?.chart_seed ?? 42);
   const accountMode = (profile?.account_mode ?? "demo") as "demo" | "live";
-  const usableBalance = accountMode === "live" ? Number(profile?.live_balance ?? 0) : Number(profile?.demo_balance ?? 10000);
+  const liveBalance = Number(profile?.live_balance ?? 0);
+  const demoBalance = Number(profile?.demo_balance ?? 10000);
+  const usableBalance = accountMode === "live" ? liveBalance : demoBalance;
+  const kycStatus = (profile?.kyc_status ?? "none") as string;
+  const isSuspended = Boolean(profile?.is_suspended);
+
+  const switchMode = async (next: "demo" | "live") => {
+    if (!user?.id || next === accountMode) return;
+    if (next === "live" && kycStatus !== "approved") {
+      toast.error("Complete KYC verification to trade with a live account");
+      return;
+    }
+    if (next === "live" && isSuspended) {
+      toast.error("Account suspended — contact support");
+      return;
+    }
+    const { error } = await supabase.from("profiles").update({ account_mode: next, updated_at: new Date().toISOString() }).eq("id", user.id);
+    if (error) return toast.error(error.message);
+    toast.success(`Switched to ${next.toUpperCase()} account`);
+    qc.invalidateQueries({ queryKey: ["profile", user.id] });
+  };
 
   const [candles, setCandles] = useState<Candle[]>(() => generateCandles(asset.sym, asset.base, mode, intensity, seed));
   const randRef = useRef(seedRand(seed + 999));
@@ -133,30 +168,62 @@ function Dashboard() {
   const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
 
   return (
-    <div className="space-y-6 dark text-foreground">
-      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back{profile?.full_name ? `, ${profile.full_name}` : ""}
-          </h1>
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            <Badge variant={accountMode === "live" ? "default" : "secondary"} className={accountMode === "live" ? "bg-success text-success-foreground" : ""}>
-              {accountMode.toUpperCase()} account
-            </Badge>
-            {profile?.is_suspended && <Badge variant="destructive">Suspended</Badge>}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button asChild size="sm" variant="outline"><Link to="/deposit"><ArrowDownToLine className="mr-1.5 h-4 w-4" /> Deposit</Link></Button>
-          <Button asChild size="sm"><Link to="/withdraw"><ArrowUpFromLine className="mr-1.5 h-4 w-4" /> Withdraw</Link></Button>
-        </div>
+    <div className="space-y-5 dark text-foreground">
+      {/* HERO BALANCE + MODE SWITCH */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="relative overflow-hidden border-0 p-5 sm:p-7 bg-gradient-hero text-primary-foreground shadow-glow">
+          <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, white 0%, transparent 40%), radial-gradient(circle at 80% 80%, white 0%, transparent 35%)" }} />
+          <div className="relative flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-medium opacity-90">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{accountMode === "live" ? "LIVE TRADING ACCOUNT" : "DEMO PRACTICE ACCOUNT"}</span>
+                {isSuspended && <Badge variant="destructive" className="ml-1">SUSPENDED</Badge>}
+              </div>
+              <div className="mt-1 text-3xl sm:text-4xl font-bold tabular-nums tracking-tight">
+                ${usableBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="mt-1 text-xs opacity-80">
+                {profile?.full_name ? `Welcome back, ${profile.full_name.split(" ")[0]}` : "Welcome back"}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {/* Mode toggle */}
+              <div className="flex rounded-full bg-black/25 p-1 backdrop-blur">
+                <button
+                  type="button"
+                  onClick={() => switchMode("demo")}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${accountMode === "demo" ? "bg-white text-primary shadow" : "text-white/80 hover:text-white"}`}
+                >DEMO</button>
+                <button
+                  type="button"
+                  onClick={() => switchMode("live")}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${accountMode === "live" ? "bg-success text-success-foreground shadow" : "text-white/80 hover:text-white"}`}
+                >LIVE</button>
+              </div>
+              {accountMode === "live" ? (
+                <span className="text-[10px] opacity-80 flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> KYC verified</span>
+              ) : kycStatus !== "approved" ? (
+                <Link to="/kyc" className="text-[10px] underline opacity-90 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Verify KYC for live
+                </Link>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="relative mt-5 flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="secondary" className="bg-white/95 text-primary hover:bg-white"><Link to="/deposit"><ArrowDownToLine className="mr-1.5 h-4 w-4" /> Deposit</Link></Button>
+            <Button asChild size="sm" variant="secondary" className="bg-black/30 text-white hover:bg-black/40"><Link to="/withdraw"><ArrowUpFromLine className="mr-1.5 h-4 w-4" /> Withdraw</Link></Button>
+            <Button asChild size="sm" variant="ghost" className="text-white hover:bg-white/10"><Link to="/transactions">Activity <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
+          </div>
+        </Card>
       </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <BalanceCard label={`${accountMode === 'live' ? 'Live' : 'Demo'} balance`} value={usableBalance} Icon={Wallet} />
+      {/* Mini balance cards (always show both so user sees real funds) */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+        <BalanceCard label="Live balance" value={liveBalance} Icon={TrendingUp} accent="success" active={accountMode === "live"} />
+        <BalanceCard label="Demo balance" value={demoBalance} Icon={Activity} accent="muted" active={accountMode === "demo"} />
         <BalanceCard label="Available cash" value={Number(profile?.available_cash ?? 0)} Icon={DollarSign} />
-        <BalanceCard label="Live balance" value={Number(profile?.live_balance ?? 0)} Icon={TrendingUp} accent="success" />
-        <BalanceCard label="Demo balance" value={Number(profile?.demo_balance ?? 0)} Icon={Activity} accent="muted" />
       </div>
 
       <Card className="p-4 sm:p-6 bg-card">
