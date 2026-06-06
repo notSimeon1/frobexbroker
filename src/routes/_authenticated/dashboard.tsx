@@ -72,6 +72,33 @@ function nextCandle(last: Candle, base: number, mode: ChartMode, intensity: numb
   return { time: ((last.time as number) + 60) as Time, open, high, low, close };
 }
 
+function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
+  const tools = [
+    { label: "Crosshair", Icon: Crosshair },
+    { label: "Trend line", Icon: TrendingUp },
+    { label: "Measure", Icon: Ruler },
+    { label: "Draw", Icon: PencilLine },
+    { label: "Magnet", Icon: Magnet },
+    { label: "Fullscreen", Icon: Maximize2 },
+  ];
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
+      <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
+        {tools.map(({ label, Icon }) => (
+          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+      <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-1 text-[10px] font-semibold uppercase">
+        <span className="rounded-md border border-border bg-card/95 px-2 py-1 text-muted-foreground backdrop-blur">Admin: {adminMode}</span>
+        {aiTradingEnabled && <span className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/15 px-2 py-1 text-primary backdrop-blur"><Bot className="h-3 w-3" /> AI on</span>}
+      </div>
+      <div className="pl-10 pt-10 sm:pl-12 sm:pt-0">{children}</div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -334,33 +361,6 @@ function RecentActivity({ userId }: { userId?: string }) {
         </div>
       )}
     </Card>
-  );
-}
-
-function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
-  const tools = [
-    { label: "Crosshair", Icon: Crosshair },
-    { label: "Trend line", Icon: TrendingUp },
-    { label: "Measure", Icon: Ruler },
-    { label: "Draw", Icon: PencilLine },
-    { label: "Magnet", Icon: Magnet },
-    { label: "Fullscreen", Icon: Maximize2 },
-  ];
-  return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
-      <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
-        {tools.map(({ label, Icon }) => (
-          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
-            <Icon className="h-4 w-4" />
-          </button>
-        ))}
-      </div>
-      <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-1 text-[10px] font-semibold uppercase">
-        <span className="rounded-md border border-border bg-card/95 px-2 py-1 text-muted-foreground backdrop-blur">Admin: {adminMode}</span>
-        {aiTradingEnabled && <span className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/15 px-2 py-1 text-primary backdrop-blur"><Bot className="h-3 w-3" /> AI on</span>}
-      </div>
-      <div className="pl-10 pt-10 sm:pl-12 sm:pt-0">{children}</div>
-    </div>
   );
 }
 
