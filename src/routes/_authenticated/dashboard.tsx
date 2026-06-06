@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
   TrendingUp, TrendingDown, Wallet, DollarSign, ArrowDownToLine, ArrowUpFromLine, Loader2, X,
-  Activity, Newspaper, Sparkles, ShieldCheck, AlertTriangle, ArrowRight,
+  Activity, Newspaper, Sparkles, ShieldCheck, AlertTriangle, ArrowRight, Crosshair, Ruler,
+  PencilLine, Magnet, Maximize2, Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -71,6 +72,33 @@ function nextCandle(last: Candle, base: number, mode: ChartMode, intensity: numb
   return { time: ((last.time as number) + 60) as Time, open, high, low, close };
 }
 
+function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
+  const tools = [
+    { label: "Crosshair", Icon: Crosshair },
+    { label: "Trend line", Icon: TrendingUp },
+    { label: "Measure", Icon: Ruler },
+    { label: "Draw", Icon: PencilLine },
+    { label: "Magnet", Icon: Magnet },
+    { label: "Fullscreen", Icon: Maximize2 },
+  ];
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
+      <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
+        {tools.map(({ label, Icon }) => (
+          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+      <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-1 text-[10px] font-semibold uppercase">
+        <span className="rounded-md border border-border bg-card/95 px-2 py-1 text-muted-foreground backdrop-blur">Admin: {adminMode}</span>
+        {aiTradingEnabled && <span className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/15 px-2 py-1 text-primary backdrop-blur"><Bot className="h-3 w-3" /> AI on</span>}
+      </div>
+      <div className="pl-10 pt-10 sm:pl-12 sm:pt-0">{children}</div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -124,14 +152,11 @@ function Dashboard() {
   const demoBalance = Number(profile?.demo_balance ?? 10000);
   const usableBalance = accountMode === "live" ? liveBalance : demoBalance;
   const kycStatus = (profile?.kyc_status ?? "none") as string;
+  const aiTradingEnabled = Boolean((profile as any)?.ai_trading_enabled);
   const isSuspended = Boolean(profile?.is_suspended);
 
   const switchMode = async (next: "demo" | "live") => {
     if (!user?.id || next === accountMode) return;
-    if (next === "live" && kycStatus !== "approved") {
-      toast.error("Complete KYC verification to trade with a live account");
-      return;
-    }
     if (next === "live" && isSuspended) {
       toast.error("Account suspended — contact support");
       return;
@@ -168,7 +193,7 @@ function Dashboard() {
   const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
 
   return (
-    <div className="space-y-5 dark text-foreground">
+    <div className="-m-6 min-h-screen space-y-5 bg-background px-6 py-5 text-foreground dark">
       {/* HERO BALANCE + MODE SWITCH */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="relative overflow-hidden border-0 p-5 sm:p-7 bg-gradient-hero text-primary-foreground shadow-glow">
@@ -201,13 +226,17 @@ function Dashboard() {
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${accountMode === "live" ? "bg-success text-success-foreground shadow" : "text-white/80 hover:text-white"}`}
                 >LIVE</button>
               </div>
-              {accountMode === "live" ? (
+              {kycStatus === "approved" ? (
                 <span className="text-[10px] opacity-80 flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> KYC verified</span>
-              ) : kycStatus !== "approved" ? (
+              ) : kycStatus === "pending" ? (
                 <Link to="/kyc" className="text-[10px] underline opacity-90 flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" /> Verify KYC for live
+                  <AlertTriangle className="h-3 w-3" /> KYC under review
                 </Link>
-              ) : null}
+              ) : (
+                <Link to="/kyc" className="text-[10px] underline opacity-90 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Submit KYC
+                </Link>
+              )}
             </div>
           </div>
 
@@ -249,10 +278,12 @@ function Dashboard() {
         </div>
 
         <div className="mt-4">
-          <TradingChart candles={candles} showMA={showMA} showRSI={showRSI} />
+          <ChartShell adminMode={mode} aiTradingEnabled={aiTradingEnabled}>
+            <TradingChart candles={candles} showMA={showMA} showRSI={showRSI} />
+          </ChartShell>
         </div>
 
-        <TradePanel asset={assetSym} price={lastPrice} balance={usableBalance} mode={accountMode} userId={user?.id} kycStatus={profile?.kyc_status ?? "none"} />
+        <TradePanel asset={assetSym} price={lastPrice} balance={usableBalance} mode={accountMode} userId={user?.id} isSuspended={isSuspended} />
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -348,7 +379,7 @@ function BalanceCard({ label, value, Icon, accent, active }: { label: string; va
   );
 }
 
-function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset: string; price: number; balance: number; mode: "demo" | "live"; userId?: string; kycStatus: string }) {
+function TradePanel({ asset, price, balance, mode, userId, isSuspended }: { asset: string; price: number; balance: number; mode: "demo" | "live"; userId?: string; isSuspended: boolean }) {
   const [amount, setAmount] = useState("100");
   const [leverage, setLeverage] = useState("10");
   const [busy, setBusy] = useState(false);
@@ -361,7 +392,7 @@ function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset:
     const lev = Math.max(1, Math.min(100, Number(leverage)));
     if (!margin || margin <= 0) return toast.error("Enter margin amount");
     if (margin > balance) return toast.error("Insufficient balance");
-    if (mode === "live" && kycStatus !== "approved") return toast.error("Complete KYC to trade live");
+    if (isSuspended) return toast.error("Account suspended — contact support");
 
     setBusy(true);
     try {
