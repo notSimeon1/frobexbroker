@@ -337,6 +337,33 @@ function RecentActivity({ userId }: { userId?: string }) {
   );
 }
 
+function ChartShell({ children, adminMode, aiTradingEnabled }: { children: React.ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
+  const tools = [
+    { label: "Crosshair", Icon: Crosshair },
+    { label: "Trend line", Icon: TrendingUp },
+    { label: "Measure", Icon: Ruler },
+    { label: "Draw", Icon: PencilLine },
+    { label: "Magnet", Icon: Magnet },
+    { label: "Fullscreen", Icon: Maximize2 },
+  ];
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
+      <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
+        {tools.map(({ label, Icon }) => (
+          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+      <div className="absolute right-2 top-2 z-10 flex flex-wrap justify-end gap-1 text-[10px] font-semibold uppercase">
+        <span className="rounded-md border border-border bg-card/95 px-2 py-1 text-muted-foreground backdrop-blur">Admin: {adminMode}</span>
+        {aiTradingEnabled && <span className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/15 px-2 py-1 text-primary backdrop-blur"><Bot className="h-3 w-3" /> AI on</span>}
+      </div>
+      <div className="pl-10 pt-10 sm:pl-12 sm:pt-0">{children}</div>
+    </div>
+  );
+}
+
 function BalanceCard({ label, value, Icon, accent, active }: { label: string; value: number; Icon: any; accent?: "success" | "muted"; active?: boolean }) {
   return (
     <Card className={`p-4 transition-all ${active ? "border-primary/60 shadow-glow bg-accent/30" : ""}`}>
@@ -352,7 +379,7 @@ function BalanceCard({ label, value, Icon, accent, active }: { label: string; va
   );
 }
 
-function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset: string; price: number; balance: number; mode: "demo" | "live"; userId?: string; kycStatus: string }) {
+function TradePanel({ asset, price, balance, mode, userId, isSuspended }: { asset: string; price: number; balance: number; mode: "demo" | "live"; userId?: string; isSuspended: boolean }) {
   const [amount, setAmount] = useState("100");
   const [leverage, setLeverage] = useState("10");
   const [busy, setBusy] = useState(false);
@@ -365,7 +392,7 @@ function TradePanel({ asset, price, balance, mode, userId, kycStatus }: { asset:
     const lev = Math.max(1, Math.min(100, Number(leverage)));
     if (!margin || margin <= 0) return toast.error("Enter margin amount");
     if (margin > balance) return toast.error("Insufficient balance");
-    if (mode === "live" && kycStatus !== "approved") return toast.error("Complete KYC to trade live");
+    if (isSuspended) return toast.error("Account suspended — contact support");
 
     setBusy(true);
     try {
