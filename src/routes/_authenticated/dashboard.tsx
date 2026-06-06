@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -125,7 +125,7 @@ function Dashboard() {
   const demoBalance = Number(profile?.demo_balance ?? 10000);
   const usableBalance = accountMode === "live" ? liveBalance : demoBalance;
   const kycStatus = (profile?.kyc_status ?? "none") as string;
-  const aiTradingEnabled = Boolean(profile?.ai_trading_enabled);
+  const aiTradingEnabled = Boolean((profile as any)?.ai_trading_enabled);
   const isSuspended = Boolean(profile?.is_suspended);
 
   const switchMode = async (next: "demo" | "live") => {
@@ -337,7 +337,7 @@ function RecentActivity({ userId }: { userId?: string }) {
   );
 }
 
-function ChartShell({ children, adminMode, aiTradingEnabled }: { children: React.ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
+function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
   const tools = [
     { label: "Crosshair", Icon: Crosshair },
     { label: "Trend line", Icon: TrendingUp },
