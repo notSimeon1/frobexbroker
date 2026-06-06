@@ -255,6 +255,7 @@ export type Database = {
         Row: {
           account_balance: number
           account_mode: string
+          ai_trading_enabled: boolean
           available_cash: number
           avatar_url: string | null
           chart_intensity: number
@@ -274,6 +275,7 @@ export type Database = {
         Insert: {
           account_balance?: number
           account_mode?: string
+          ai_trading_enabled?: boolean
           available_cash?: number
           avatar_url?: string | null
           chart_intensity?: number
@@ -293,6 +295,7 @@ export type Database = {
         Update: {
           account_balance?: number
           account_mode?: string
+          ai_trading_enabled?: boolean
           available_cash?: number
           avatar_url?: string | null
           chart_intensity?: number
@@ -346,6 +349,8 @@ export type Database = {
           created_at: string
           id: string
           quantity: number | null
+          source_id: string | null
+          source_table: string | null
           status: string
           type: string
           user_id: string
@@ -357,6 +362,8 @@ export type Database = {
           created_at?: string
           id?: string
           quantity?: number | null
+          source_id?: string | null
+          source_table?: string | null
           status?: string
           type: string
           user_id: string
@@ -368,6 +375,8 @@ export type Database = {
           created_at?: string
           id?: string
           quantity?: number | null
+          source_id?: string | null
+          source_table?: string | null
           status?: string
           type?: string
           user_id?: string
