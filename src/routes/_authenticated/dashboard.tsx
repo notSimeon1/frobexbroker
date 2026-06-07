@@ -116,6 +116,12 @@ function Dashboard() {
   const asset = ASSETS.find((a) => a.sym === assetSym)!;
   const [showMA, setShowMA] = useState(true);
   const [showRSI, setShowRSI] = useState(false);
+  const [magnet, setMagnet] = useState(false);
+  const [crosshair, setCrosshair] = useState(true);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const openPositionFn = useServerFn(openPosition);
+  const closePositionFn = useServerFn(closePosition);
+  const aiBusyRef = useRef(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
