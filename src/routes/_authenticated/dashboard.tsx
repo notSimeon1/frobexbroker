@@ -273,7 +273,7 @@ function Dashboard() {
     return () => clearInterval(id);
   }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
 
-  const toolbar: ToolbarHandlers = {
+  const toolbar = {
     showMA, toggleMA: () => setShowMA((v) => !v),
     showRSI, toggleRSI: () => setShowRSI((v) => !v),
     magnet, toggleMagnet: () => { setMagnet((v) => !v); toast.message(magnet ? "Magnet off" : "Magnet on — snapping to OHLC"); },
