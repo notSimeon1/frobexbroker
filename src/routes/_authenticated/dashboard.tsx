@@ -575,6 +575,15 @@ function RecentActivity({ userId }: { userId?: string }) {
   );
 }
 
+function Stat({ label, value, accent }: { label: string; value: string | number; accent?: "success" | "destructive" }) {
+  return (
+    <div className="text-center">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-sm font-bold tabular-nums ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
 function BalanceCard({ label, value, Icon, accent, active }: { label: string; value: number; Icon: any; accent?: "success" | "muted"; active?: boolean }) {
   return (
     <Card className={`p-4 transition-all ${active ? "border-primary/60 shadow-glow bg-accent/30" : ""}`}>
