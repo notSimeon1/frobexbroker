@@ -47,12 +47,13 @@ function generateCandles(asset: string, base: number, mode: ChartMode, intensity
   let price = base;
   const now = Math.floor(Date.now() / 1000);
   const interval = 60; // 1 min
-  const drift = mode === "profit" ? 0.0008 : mode === "loss" ? -0.0008 : 0;
+  // Strong directional drift so admin "profit/loss" is visually obvious on the user chart
+  const driftPct = mode === "profit" ? 0.0035 * intensity : mode === "loss" ? -0.0035 * intensity : 0;
   for (let i = count - 1; i >= 0; i--) {
     const t = (now - i * interval) as Time;
-    const vol = base * 0.004 * intensity;
+    const vol = base * 0.004 * Math.max(0.5, intensity);
     const open = price;
-    const change = (rand() - 0.5) * vol * 2 + drift * base;
+    const change = (rand() - 0.5) * vol * 2 + driftPct * base;
     const close = Math.max(0.0001, open + change);
     const high = Math.max(open, close) + rand() * vol * 0.6;
     const low = Math.min(open, close) - rand() * vol * 0.6;
@@ -63,10 +64,10 @@ function generateCandles(asset: string, base: number, mode: ChartMode, intensity
 }
 
 function nextCandle(last: Candle, base: number, mode: ChartMode, intensity: number, rand: () => number): Candle {
-  const drift = mode === "profit" ? 0.0008 : mode === "loss" ? -0.0008 : 0;
-  const vol = base * 0.004 * intensity;
+  const driftPct = mode === "profit" ? 0.0035 * intensity : mode === "loss" ? -0.0035 * intensity : 0;
+  const vol = base * 0.004 * Math.max(0.5, intensity);
   const open = last.close;
-  const close = Math.max(0.0001, open + (rand() - 0.5) * vol * 2 + drift * base);
+  const close = Math.max(0.0001, open + (rand() - 0.5) * vol * 2 + driftPct * base);
   const high = Math.max(open, close) + rand() * vol * 0.6;
   const low = Math.min(open, close) - rand() * vol * 0.6;
   return { time: ((last.time as number) + 60) as Time, open, high, low, close };
