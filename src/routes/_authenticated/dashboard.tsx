@@ -478,6 +478,30 @@ function Dashboard() {
         <OrderBook price={lastPrice} />
       </div>
 
+      {aiTradingEnabled && (
+        <Card className="p-4 sm:p-5 border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/20">
+                <Bot className="h-4 w-4 text-primary" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-success ring-2 ring-card" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">AI Trader · live</div>
+                <div className="text-[10px] text-muted-foreground">Multi-indicator confluence · 3:1 R/R · trailing stop</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs">
+              <Stat label="Trades" value={aiStats.trades} />
+              <Stat label="Wins" value={aiStats.wins} accent="success" />
+              <Stat label="Losses" value={aiStats.losses} accent="destructive" />
+              <Stat label="Win rate" value={aiStats.trades ? `${Math.round((aiStats.wins / aiStats.trades) * 100)}%` : "—"} />
+              <Stat label="Net P&L" value={`${aiStats.netPnl >= 0 ? "+" : ""}$${aiStats.netPnl.toFixed(2)}`} accent={aiStats.netPnl >= 0 ? "success" : "destructive"} />
+            </div>
+          </div>
+        </Card>
+      )}
+
       <RecentActivity userId={user?.id} />
 
       <NewsTicker />
