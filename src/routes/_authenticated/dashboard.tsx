@@ -82,7 +82,7 @@ type ToolbarHandlers = {
   fullscreen: () => void;
 };
 
-function ChartShell({ children, adminMode, aiTradingEnabled, containerRef, tb }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean; containerRef: React.RefObject<HTMLDivElement>; tb: ToolbarHandlers }) {
+function ChartShell({ children, adminMode, aiTradingEnabled, containerRef, tb }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean; containerRef: React.RefObject<HTMLDivElement | null>; tb: ToolbarHandlers }) {
   const tools: { label: string; Icon: any; onClick: () => void; active?: boolean }[] = [
     { label: tb.crosshair ? "Crosshair on" : "Crosshair off", Icon: Crosshair, onClick: tb.toggleCrosshair, active: tb.crosshair },
     { label: tb.showMA ? "Hide MA(14)" : "Show MA(14)", Icon: TrendingUp, onClick: tb.toggleMA, active: tb.showMA },
