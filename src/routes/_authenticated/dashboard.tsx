@@ -291,6 +291,8 @@ function Dashboard() {
       else el.requestFullscreen?.();
     },
   };
+
+  return (
     <div className="-m-6 min-h-screen space-y-5 bg-background px-6 py-5 text-foreground dark">
       {/* HERO BALANCE + MODE SWITCH */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
