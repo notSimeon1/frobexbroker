@@ -90,14 +90,14 @@ function AdminPage() {
       </div>
 
       <Tabs defaultValue="deposits">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="deposits">Deposits</TabsTrigger>
-          <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
-          <TabsTrigger value="users">Users &amp; Charts</TabsTrigger>
-          <TabsTrigger value="kyc">KYC Review</TabsTrigger>
-          <TabsTrigger value="news">Market News</TabsTrigger>
-          <TabsTrigger value="complaints">Complaints</TabsTrigger>
-          <TabsTrigger value="settings">Wallet Settings</TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto gap-1.5 p-1.5 bg-muted/50 w-full justify-start">
+          <TabsTrigger value="deposits" className="shrink-0">Deposits</TabsTrigger>
+          <TabsTrigger value="withdrawals" className="shrink-0">Withdrawals</TabsTrigger>
+          <TabsTrigger value="users" className="shrink-0">Users &amp; Charts</TabsTrigger>
+          <TabsTrigger value="kyc" className="shrink-0">KYC Review</TabsTrigger>
+          <TabsTrigger value="news" className="shrink-0">Market News</TabsTrigger>
+          <TabsTrigger value="complaints" className="shrink-0">Complaints</TabsTrigger>
+          <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
         </TabsList>
 
         <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
