@@ -73,20 +73,29 @@ function nextCandle(last: Candle, base: number, mode: ChartMode, intensity: numb
   return { time: ((last.time as number) + 60) as Time, open, high, low, close };
 }
 
-function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
-  const tools = [
-    { label: "Crosshair", Icon: Crosshair },
-    { label: "Trend line", Icon: TrendingUp },
-    { label: "Measure", Icon: Ruler },
-    { label: "Draw", Icon: PencilLine },
-    { label: "Magnet", Icon: Magnet },
-    { label: "Fullscreen", Icon: Maximize2 },
+type ToolbarHandlers = {
+  showMA: boolean; toggleMA: () => void;
+  showRSI: boolean; toggleRSI: () => void;
+  magnet: boolean; toggleMagnet: () => void;
+  crosshair: boolean; toggleCrosshair: () => void;
+  measure: () => void;
+  fullscreen: () => void;
+};
+
+function ChartShell({ children, adminMode, aiTradingEnabled, containerRef, tb }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean; containerRef: React.RefObject<HTMLDivElement>; tb: ToolbarHandlers }) {
+  const tools: { label: string; Icon: any; onClick: () => void; active?: boolean }[] = [
+    { label: tb.crosshair ? "Crosshair on" : "Crosshair off", Icon: Crosshair, onClick: tb.toggleCrosshair, active: tb.crosshair },
+    { label: tb.showMA ? "Hide MA(14)" : "Show MA(14)", Icon: TrendingUp, onClick: tb.toggleMA, active: tb.showMA },
+    { label: "Measure range", Icon: Ruler, onClick: tb.measure },
+    { label: tb.showRSI ? "Hide RSI(14)" : "Show RSI(14)", Icon: PencilLine, onClick: tb.toggleRSI, active: tb.showRSI },
+    { label: tb.magnet ? "Magnet on" : "Magnet off", Icon: Magnet, onClick: tb.toggleMagnet, active: tb.magnet },
+    { label: "Fullscreen", Icon: Maximize2, onClick: tb.fullscreen },
   ];
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
+    <div ref={containerRef} className="relative overflow-hidden rounded-lg border border-border bg-background">
       <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
-        {tools.map(({ label, Icon }) => (
-          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+        {tools.map(({ label, Icon, onClick, active }) => (
+          <button key={label} type="button" title={label} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}>
             <Icon className="h-4 w-4" />
           </button>
         ))}
