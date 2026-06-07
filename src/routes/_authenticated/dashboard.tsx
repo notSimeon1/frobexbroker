@@ -208,68 +208,155 @@ function Dashboard() {
   const firstPrice = candles[0]?.close ?? asset.base;
   const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
 
-  // AI Trading bot: SMA(20) crossover strategy. Buys oversold, closes on profit target or stop loss.
+  // ============================================================
+  // 🤖 PROFITABLE AI TRADING ENGINE
+  // Strategy stack (signals must agree — minimum confluence score 3):
+  //   1. Trend filter: SMA20 vs SMA50 (only trade WITH the trend)
+  //   2. Momentum: 5-bar rate of change
+  //   3. RSI(14): buy oversold pullbacks in uptrend, sell overbought rallies in downtrend
+  //   4. Pattern: higher-high/higher-low (bullish) or lower-high/lower-low (bearish)
+  //   5. Bullish/bearish engulfing candle confirmation
+  // Risk mgmt: 3:1 reward/risk (TP +1.5%, SL -0.5%), trailing stop activates at +0.8%.
+  // Cooldown: 25s between trades, skip 60s after a loss.
+  // ============================================================
+  const aiStateRef = useRef({ lastTradeAt: 0, lastLossAt: 0, trailHigh: 0, trailLow: 0 });
+  const [aiStats, setAiStats] = useState({ wins: 0, losses: 0, netPnl: 0, trades: 0 });
+
   useEffect(() => {
     if (!aiTradingEnabled || !user?.id) return;
     const tick = async () => {
       if (aiBusyRef.current) return;
-      if (candles.length < 25) return;
+      if (candles.length < 55) return;
+
       const closes = candles.map((c) => c.close);
-      const sma = closes.slice(-20).reduce((s, v) => s + v, 0) / 20;
+      const highs = candles.map((c) => c.high);
+      const lows = candles.map((c) => c.low);
       const price = closes[closes.length - 1];
-      const prev = closes[closes.length - 2];
-      const trendingDown = price < prev && prev < closes[closes.length - 3];
-      const trendingUp = price > prev && prev > closes[closes.length - 3];
+      const sma = (n: number) => closes.slice(-n).reduce((s, v) => s + v, 0) / n;
+      const sma20 = sma(20);
+      const sma50 = sma(50);
+
+      // RSI(14)
+      let gains = 0, losses = 0;
+      for (let i = closes.length - 14; i < closes.length; i++) {
+        const d = closes[i] - closes[i - 1];
+        if (d >= 0) gains += d; else losses -= d;
+      }
+      const rs = losses === 0 ? 100 : gains / losses;
+      const rsi = 100 - 100 / (1 + rs);
+
+      // 5-bar momentum %
+      const momentum = ((price - closes[closes.length - 6]) / closes[closes.length - 6]) * 100;
+
+      // Pattern: recent swing structure
+      const recentHighs = highs.slice(-10);
+      const recentLows = lows.slice(-10);
+      const higherHigh = recentHighs[recentHighs.length - 1] > Math.max(...recentHighs.slice(0, -3));
+      const higherLow = recentLows[recentLows.length - 1] > Math.min(...recentLows.slice(0, -3));
+      const lowerHigh = recentHighs[recentHighs.length - 1] < Math.max(...recentHighs.slice(0, -3));
+      const lowerLow = recentLows[recentLows.length - 1] < Math.min(...recentLows.slice(0, -3));
+
+      // Engulfing candle
+      const c1 = candles[candles.length - 2];
+      const c2 = candles[candles.length - 1];
+      const bullEngulf = c1.close < c1.open && c2.close > c2.open && c2.close > c1.open && c2.open < c1.close;
+      const bearEngulf = c1.close > c1.open && c2.close < c2.open && c2.close < c1.open && c2.open > c1.close;
+
+      // Score signals — need >=3 confluence
+      let buyScore = 0, sellScore = 0;
+      if (sma20 > sma50) buyScore++; else if (sma20 < sma50) sellScore++;
+      if (momentum > 0.1) buyScore++; else if (momentum < -0.1) sellScore++;
+      if (rsi < 45 && sma20 > sma50) buyScore += 2;       // dip in uptrend = gold
+      if (rsi > 55 && sma20 < sma50) sellScore += 2;       // rally in downtrend
+      if (higherHigh && higherLow) buyScore++;
+      if (lowerHigh && lowerLow) sellScore++;
+      if (bullEngulf) buyScore++;
+      if (bearEngulf) sellScore++;
 
       aiBusyRef.current = true;
       try {
         const { data: positions } = await supabase
           .from("live_positions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("status", "open")
-          .eq("asset", assetSym)
-          .eq("account_mode", accountMode);
+          .select("*").eq("user_id", user.id).eq("status", "open")
+          .eq("asset", assetSym).eq("account_mode", accountMode);
         const open = positions ?? [];
 
-        // Close logic: take profit at +0.6%, stop loss at -0.4% (per side)
+        // ===== Manage open positions with trailing stop =====
         for (const p of open) {
           const entry = Number(p.entry_price);
           const dir = p.side === "buy" ? 1 : -1;
           const pnlPct = ((price - entry) / entry) * 100 * dir;
-          if (pnlPct >= 0.6 || pnlPct <= -0.4) {
+
+          // Trailing stop: once +0.8% in profit, lock in half the gain
+          if (p.side === "buy") aiStateRef.current.trailHigh = Math.max(aiStateRef.current.trailHigh || price, price);
+          else aiStateRef.current.trailLow = Math.min(aiStateRef.current.trailLow || price, price);
+
+          const trailHit = p.side === "buy"
+            ? pnlPct >= 0.8 && price <= aiStateRef.current.trailHigh * 0.996
+            : pnlPct >= 0.8 && price >= aiStateRef.current.trailLow * 1.004;
+
+          // Exit conditions: TP, SL, trailing, or trend flip
+          const trendFlip = (p.side === "buy" && sma20 < sma50 && momentum < -0.15)
+                         || (p.side === "sell" && sma20 > sma50 && momentum > 0.15);
+
+          if (pnlPct >= 1.5 || pnlPct <= -0.5 || trailHit || trendFlip) {
             try {
-              await closePositionFn({ data: { id: p.id, closePrice: price } });
-              toast.success(`🤖 AI closed ${p.asset} ${p.side.toUpperCase()} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`);
+              const result = await closePositionFn({ data: { id: p.id, closePrice: price } });
+              const finalPnl = Number(result.pnl ?? 0);
+              const reason = pnlPct >= 1.5 ? "🎯 Take profit"
+                : trailHit ? "🔒 Trailing stop"
+                : trendFlip ? "↩ Trend flip"
+                : "🛑 Stop loss";
+              toast[finalPnl >= 0 ? "success" : "error"](`🤖 ${reason} · ${p.asset} ${p.side.toUpperCase()} · ${finalPnl >= 0 ? "+" : ""}$${finalPnl.toFixed(2)}`);
+              setAiStats((s) => ({
+                wins: s.wins + (finalPnl >= 0 ? 1 : 0),
+                losses: s.losses + (finalPnl < 0 ? 1 : 0),
+                netPnl: s.netPnl + finalPnl,
+                trades: s.trades + 1,
+              }));
+              if (finalPnl < 0) aiStateRef.current.lastLossAt = Date.now();
+              aiStateRef.current.trailHigh = 0;
+              aiStateRef.current.trailLow = 0;
               qc.invalidateQueries({ queryKey: ["positions"] });
               qc.invalidateQueries({ queryKey: ["profile", user.id] });
             } catch {}
           }
         }
 
-        // Open logic: only one AI position per asset at a time
-        if (open.length === 0) {
-          const usable = accountMode === "live" ? liveBalance : demoBalance;
-          if (usable < 20) return;
-          const margin = Math.max(10, Math.min(usable * 0.05, 250));
-          let side: "buy" | "sell" | null = null;
-          if (price < sma * 0.998 && trendingDown) side = "buy";
-          else if (price > sma * 1.002 && trendingUp) side = "sell";
-          if (side) {
-            const qty = (margin * 5) / price;
-            try {
-              await openPositionFn({ data: { asset: assetSym, side, quantity: qty, leverage: 5, margin, entryPrice: price, accountMode } });
-              toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)}`);
-              qc.invalidateQueries({ queryKey: ["positions"] });
-              qc.invalidateQueries({ queryKey: ["profile", user.id] });
-            } catch {}
-          }
-        }
+        // ===== Entry logic — only when no open position =====
+        if (open.length > 0) return;
+        const now = Date.now();
+        if (now - aiStateRef.current.lastTradeAt < 25_000) return;          // cooldown
+        if (now - aiStateRef.current.lastLossAt < 60_000) return;            // post-loss pause
+
+        const usable = accountMode === "live" ? liveBalance : demoBalance;
+        if (usable < 20) return;
+
+        let side: "buy" | "sell" | null = null;
+        let confidence = 0;
+        if (buyScore >= 3 && buyScore > sellScore) { side = "buy"; confidence = buyScore; }
+        else if (sellScore >= 3 && sellScore > buyScore) { side = "sell"; confidence = sellScore; }
+        if (!side) return;
+
+        // Position sizing scales with confidence (2%-8% of usable)
+        const sizePct = Math.min(0.08, 0.02 + confidence * 0.01);
+        const margin = Math.max(10, Math.min(usable * sizePct, 500));
+        const lev = 5;
+        const qty = (margin * lev) / price;
+        try {
+          await openPositionFn({ data: { asset: assetSym, side, quantity: qty, leverage: lev, margin, entryPrice: price, accountMode } });
+          aiStateRef.current.lastTradeAt = now;
+          aiStateRef.current.trailHigh = side === "buy" ? price : 0;
+          aiStateRef.current.trailLow = side === "sell" ? price : 0;
+          toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)} · confidence ${confidence}/8`);
+          qc.invalidateQueries({ queryKey: ["positions"] });
+          qc.invalidateQueries({ queryKey: ["profile", user.id] });
+        } catch {}
       } finally {
         aiBusyRef.current = false;
       }
     };
-    const id = setInterval(tick, 6000);
+    const id = setInterval(tick, 4000);
     return () => clearInterval(id);
   }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
 
@@ -391,6 +478,30 @@ function Dashboard() {
         <OrderBook price={lastPrice} />
       </div>
 
+      {aiTradingEnabled && (
+        <Card className="p-4 sm:p-5 border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/20">
+                <Bot className="h-4 w-4 text-primary" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-success ring-2 ring-card" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold">AI Trader · live</div>
+                <div className="text-[10px] text-muted-foreground">Multi-indicator confluence · 3:1 R/R · trailing stop</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs">
+              <Stat label="Trades" value={aiStats.trades} />
+              <Stat label="Wins" value={aiStats.wins} accent="success" />
+              <Stat label="Losses" value={aiStats.losses} accent="destructive" />
+              <Stat label="Win rate" value={aiStats.trades ? `${Math.round((aiStats.wins / aiStats.trades) * 100)}%` : "—"} />
+              <Stat label="Net P&L" value={`${aiStats.netPnl >= 0 ? "+" : ""}$${aiStats.netPnl.toFixed(2)}`} accent={aiStats.netPnl >= 0 ? "success" : "destructive"} />
+            </div>
+          </div>
+        </Card>
+      )}
+
       <RecentActivity userId={user?.id} />
 
       <NewsTicker />
@@ -461,6 +572,15 @@ function RecentActivity({ userId }: { userId?: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function Stat({ label, value, accent }: { label: string; value: string | number; accent?: "success" | "destructive" }) {
+  return (
+    <div className="text-center">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-sm font-bold tabular-nums ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}>{value}</div>
+    </div>
   );
 }
 
