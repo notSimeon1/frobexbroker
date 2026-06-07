@@ -378,7 +378,7 @@ function Dashboard() {
         </div>
 
         <div className="mt-4">
-          <ChartShell adminMode={mode} aiTradingEnabled={aiTradingEnabled}>
+          <ChartShell adminMode={mode} aiTradingEnabled={aiTradingEnabled} containerRef={chartContainerRef} tb={toolbar}>
             <TradingChart candles={candles} showMA={showMA} showRSI={showRSI} />
           </ChartShell>
         </div>
