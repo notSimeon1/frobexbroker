@@ -47,12 +47,13 @@ function generateCandles(asset: string, base: number, mode: ChartMode, intensity
   let price = base;
   const now = Math.floor(Date.now() / 1000);
   const interval = 60; // 1 min
-  const drift = mode === "profit" ? 0.0008 : mode === "loss" ? -0.0008 : 0;
+  // Strong directional drift so admin "profit/loss" is visually obvious on the user chart
+  const driftPct = mode === "profit" ? 0.0035 * intensity : mode === "loss" ? -0.0035 * intensity : 0;
   for (let i = count - 1; i >= 0; i--) {
     const t = (now - i * interval) as Time;
-    const vol = base * 0.004 * intensity;
+    const vol = base * 0.004 * Math.max(0.5, intensity);
     const open = price;
-    const change = (rand() - 0.5) * vol * 2 + drift * base;
+    const change = (rand() - 0.5) * vol * 2 + driftPct * base;
     const close = Math.max(0.0001, open + change);
     const high = Math.max(open, close) + rand() * vol * 0.6;
     const low = Math.min(open, close) - rand() * vol * 0.6;
@@ -63,29 +64,38 @@ function generateCandles(asset: string, base: number, mode: ChartMode, intensity
 }
 
 function nextCandle(last: Candle, base: number, mode: ChartMode, intensity: number, rand: () => number): Candle {
-  const drift = mode === "profit" ? 0.0008 : mode === "loss" ? -0.0008 : 0;
-  const vol = base * 0.004 * intensity;
+  const driftPct = mode === "profit" ? 0.0035 * intensity : mode === "loss" ? -0.0035 * intensity : 0;
+  const vol = base * 0.004 * Math.max(0.5, intensity);
   const open = last.close;
-  const close = Math.max(0.0001, open + (rand() - 0.5) * vol * 2 + drift * base);
+  const close = Math.max(0.0001, open + (rand() - 0.5) * vol * 2 + driftPct * base);
   const high = Math.max(open, close) + rand() * vol * 0.6;
   const low = Math.min(open, close) - rand() * vol * 0.6;
   return { time: ((last.time as number) + 60) as Time, open, high, low, close };
 }
 
-function ChartShell({ children, adminMode, aiTradingEnabled }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean }) {
-  const tools = [
-    { label: "Crosshair", Icon: Crosshair },
-    { label: "Trend line", Icon: TrendingUp },
-    { label: "Measure", Icon: Ruler },
-    { label: "Draw", Icon: PencilLine },
-    { label: "Magnet", Icon: Magnet },
-    { label: "Fullscreen", Icon: Maximize2 },
+type ToolbarHandlers = {
+  showMA: boolean; toggleMA: () => void;
+  showRSI: boolean; toggleRSI: () => void;
+  magnet: boolean; toggleMagnet: () => void;
+  crosshair: boolean; toggleCrosshair: () => void;
+  measure: () => void;
+  fullscreen: () => void;
+};
+
+function ChartShell({ children, adminMode, aiTradingEnabled, containerRef, tb }: { children: ReactNode; adminMode: ChartMode; aiTradingEnabled: boolean; containerRef: React.RefObject<HTMLDivElement | null>; tb: ToolbarHandlers }) {
+  const tools: { label: string; Icon: any; onClick: () => void; active?: boolean }[] = [
+    { label: tb.crosshair ? "Crosshair on" : "Crosshair off", Icon: Crosshair, onClick: tb.toggleCrosshair, active: tb.crosshair },
+    { label: tb.showMA ? "Hide MA(14)" : "Show MA(14)", Icon: TrendingUp, onClick: tb.toggleMA, active: tb.showMA },
+    { label: "Measure range", Icon: Ruler, onClick: tb.measure },
+    { label: tb.showRSI ? "Hide RSI(14)" : "Show RSI(14)", Icon: PencilLine, onClick: tb.toggleRSI, active: tb.showRSI },
+    { label: tb.magnet ? "Magnet on" : "Magnet off", Icon: Magnet, onClick: tb.toggleMagnet, active: tb.magnet },
+    { label: "Fullscreen", Icon: Maximize2, onClick: tb.fullscreen },
   ];
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-background">
+    <div ref={containerRef} className="relative overflow-hidden rounded-lg border border-border bg-background">
       <div className="absolute left-2 top-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/95 p-1 shadow-elegant backdrop-blur">
-        {tools.map(({ label, Icon }) => (
-          <button key={label} type="button" title={label} className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+        {tools.map(({ label, Icon, onClick, active }) => (
+          <button key={label} type="button" title={label} onClick={onClick} className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${active ? "bg-primary/20 text-primary" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}>
             <Icon className="h-4 w-4" />
           </button>
         ))}
@@ -106,6 +116,12 @@ function Dashboard() {
   const asset = ASSETS.find((a) => a.sym === assetSym)!;
   const [showMA, setShowMA] = useState(true);
   const [showRSI, setShowRSI] = useState(false);
+  const [magnet, setMagnet] = useState(false);
+  const [crosshair, setCrosshair] = useState(true);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const openPositionFn = useServerFn(openPosition);
+  const closePositionFn = useServerFn(closePosition);
+  const aiBusyRef = useRef(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -191,6 +207,90 @@ function Dashboard() {
   const lastPrice = candles[candles.length - 1]?.close ?? asset.base;
   const firstPrice = candles[0]?.close ?? asset.base;
   const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
+
+  // AI Trading bot: SMA(20) crossover strategy. Buys oversold, closes on profit target or stop loss.
+  useEffect(() => {
+    if (!aiTradingEnabled || !user?.id) return;
+    const tick = async () => {
+      if (aiBusyRef.current) return;
+      if (candles.length < 25) return;
+      const closes = candles.map((c) => c.close);
+      const sma = closes.slice(-20).reduce((s, v) => s + v, 0) / 20;
+      const price = closes[closes.length - 1];
+      const prev = closes[closes.length - 2];
+      const trendingDown = price < prev && prev < closes[closes.length - 3];
+      const trendingUp = price > prev && prev > closes[closes.length - 3];
+
+      aiBusyRef.current = true;
+      try {
+        const { data: positions } = await supabase
+          .from("live_positions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "open")
+          .eq("asset", assetSym)
+          .eq("account_mode", accountMode);
+        const open = positions ?? [];
+
+        // Close logic: take profit at +0.6%, stop loss at -0.4% (per side)
+        for (const p of open) {
+          const entry = Number(p.entry_price);
+          const dir = p.side === "buy" ? 1 : -1;
+          const pnlPct = ((price - entry) / entry) * 100 * dir;
+          if (pnlPct >= 0.6 || pnlPct <= -0.4) {
+            try {
+              await closePositionFn({ data: { id: p.id, closePrice: price } });
+              toast.success(`🤖 AI closed ${p.asset} ${p.side.toUpperCase()} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`);
+              qc.invalidateQueries({ queryKey: ["positions"] });
+              qc.invalidateQueries({ queryKey: ["profile", user.id] });
+            } catch {}
+          }
+        }
+
+        // Open logic: only one AI position per asset at a time
+        if (open.length === 0) {
+          const usable = accountMode === "live" ? liveBalance : demoBalance;
+          if (usable < 20) return;
+          const margin = Math.max(10, Math.min(usable * 0.05, 250));
+          let side: "buy" | "sell" | null = null;
+          if (price < sma * 0.998 && trendingDown) side = "buy";
+          else if (price > sma * 1.002 && trendingUp) side = "sell";
+          if (side) {
+            const qty = (margin * 5) / price;
+            try {
+              await openPositionFn({ data: { asset: assetSym, side, quantity: qty, leverage: 5, margin, entryPrice: price, accountMode } });
+              toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)}`);
+              qc.invalidateQueries({ queryKey: ["positions"] });
+              qc.invalidateQueries({ queryKey: ["profile", user.id] });
+            } catch {}
+          }
+        }
+      } finally {
+        aiBusyRef.current = false;
+      }
+    };
+    const id = setInterval(tick, 6000);
+    return () => clearInterval(id);
+  }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
+
+  const toolbar: ToolbarHandlers = {
+    showMA, toggleMA: () => setShowMA((v) => !v),
+    showRSI, toggleRSI: () => setShowRSI((v) => !v),
+    magnet, toggleMagnet: () => { setMagnet((v) => !v); toast.message(magnet ? "Magnet off" : "Magnet on — snapping to OHLC"); },
+    crosshair, toggleCrosshair: () => { setCrosshair((v) => !v); toast.message(crosshair ? "Crosshair hidden" : "Crosshair active"); },
+    measure: () => {
+      const hi = Math.max(...candles.slice(-30).map((c) => c.high));
+      const lo = Math.min(...candles.slice(-30).map((c) => c.low));
+      const range = ((hi - lo) / lo) * 100;
+      toast.message(`Range (last 30): $${lo.toFixed(2)} → $${hi.toFixed(2)} · ${range.toFixed(2)}%`);
+    },
+    fullscreen: () => {
+      const el = chartContainerRef.current;
+      if (!el) return;
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else el.requestFullscreen?.();
+    },
+  };
 
   return (
     <div className="-m-6 min-h-screen space-y-5 bg-background px-6 py-5 text-foreground dark">
@@ -278,7 +378,7 @@ function Dashboard() {
         </div>
 
         <div className="mt-4">
-          <ChartShell adminMode={mode} aiTradingEnabled={aiTradingEnabled}>
+          <ChartShell adminMode={mode} aiTradingEnabled={aiTradingEnabled} containerRef={chartContainerRef} tb={toolbar}>
             <TradingChart candles={candles} showMA={showMA} showRSI={showRSI} />
           </ChartShell>
         </div>
