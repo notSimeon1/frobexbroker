@@ -208,7 +208,89 @@ function Dashboard() {
   const firstPrice = candles[0]?.close ?? asset.base;
   const changePct = ((lastPrice - firstPrice) / firstPrice) * 100;
 
-  return (
+  // AI Trading bot: SMA(20) crossover strategy. Buys oversold, closes on profit target or stop loss.
+  useEffect(() => {
+    if (!aiTradingEnabled || !user?.id) return;
+    const tick = async () => {
+      if (aiBusyRef.current) return;
+      if (candles.length < 25) return;
+      const closes = candles.map((c) => c.close);
+      const sma = closes.slice(-20).reduce((s, v) => s + v, 0) / 20;
+      const price = closes[closes.length - 1];
+      const prev = closes[closes.length - 2];
+      const trendingDown = price < prev && prev < closes[closes.length - 3];
+      const trendingUp = price > prev && prev > closes[closes.length - 3];
+
+      aiBusyRef.current = true;
+      try {
+        const { data: positions } = await supabase
+          .from("live_positions")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "open")
+          .eq("asset", assetSym)
+          .eq("account_mode", accountMode);
+        const open = positions ?? [];
+
+        // Close logic: take profit at +0.6%, stop loss at -0.4% (per side)
+        for (const p of open) {
+          const entry = Number(p.entry_price);
+          const dir = p.side === "buy" ? 1 : -1;
+          const pnlPct = ((price - entry) / entry) * 100 * dir;
+          if (pnlPct >= 0.6 || pnlPct <= -0.4) {
+            try {
+              await closePositionFn({ data: { id: p.id, closePrice: price } });
+              toast.success(`🤖 AI closed ${p.asset} ${p.side.toUpperCase()} · ${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`);
+              qc.invalidateQueries({ queryKey: ["positions"] });
+              qc.invalidateQueries({ queryKey: ["profile", user.id] });
+            } catch {}
+          }
+        }
+
+        // Open logic: only one AI position per asset at a time
+        if (open.length === 0) {
+          const usable = accountMode === "live" ? liveBalance : demoBalance;
+          if (usable < 20) return;
+          const margin = Math.max(10, Math.min(usable * 0.05, 250));
+          let side: "buy" | "sell" | null = null;
+          if (price < sma * 0.998 && trendingDown) side = "buy";
+          else if (price > sma * 1.002 && trendingUp) side = "sell";
+          if (side) {
+            const qty = (margin * 5) / price;
+            try {
+              await openPositionFn({ data: { asset: assetSym, side, quantity: qty, leverage: 5, margin, entryPrice: price, accountMode } });
+              toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)}`);
+              qc.invalidateQueries({ queryKey: ["positions"] });
+              qc.invalidateQueries({ queryKey: ["profile", user.id] });
+            } catch {}
+          }
+        }
+      } finally {
+        aiBusyRef.current = false;
+      }
+    };
+    const id = setInterval(tick, 6000);
+    return () => clearInterval(id);
+  }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
+
+  const toolbar: ToolbarHandlers = {
+    showMA, toggleMA: () => setShowMA((v) => !v),
+    showRSI, toggleRSI: () => setShowRSI((v) => !v),
+    magnet, toggleMagnet: () => { setMagnet((v) => !v); toast.message(magnet ? "Magnet off" : "Magnet on — snapping to OHLC"); },
+    crosshair, toggleCrosshair: () => { setCrosshair((v) => !v); toast.message(crosshair ? "Crosshair hidden" : "Crosshair active"); },
+    measure: () => {
+      const hi = Math.max(...candles.slice(-30).map((c) => c.high));
+      const lo = Math.min(...candles.slice(-30).map((c) => c.low));
+      const range = ((hi - lo) / lo) * 100;
+      toast.message(`Range (last 30): $${lo.toFixed(2)} → $${hi.toFixed(2)} · ${range.toFixed(2)}%`);
+    },
+    fullscreen: () => {
+      const el = chartContainerRef.current;
+      if (!el) return;
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else el.requestFullscreen?.();
+    },
+  };
     <div className="-m-6 min-h-screen space-y-5 bg-background px-6 py-5 text-foreground dark">
       {/* HERO BALANCE + MODE SWITCH */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
