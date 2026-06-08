@@ -319,7 +319,11 @@ function Dashboard() {
               aiStateRef.current.trailLow = 0;
               qc.invalidateQueries({ queryKey: ["positions"] });
               qc.invalidateQueries({ queryKey: ["profile", user.id] });
-            } catch {}
+              qc.invalidateQueries({ queryKey: ["recent_tx", user.id] });
+              qc.invalidateQueries({ queryKey: ["transactions", user.id] });
+            } catch (err: any) {
+              console.error("AI close failed", err);
+            }
           }
         }
 
