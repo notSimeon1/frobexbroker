@@ -226,7 +226,7 @@ function Dashboard() {
     if (!aiTradingEnabled || !user?.id) return;
     const tick = async () => {
       if (aiBusyRef.current) return;
-      if (candles.length < 55) return;
+      if (candles.length < 30) return;
 
       const closes = candles.map((c) => c.close);
       const highs = candles.map((c) => c.high);
@@ -319,23 +319,27 @@ function Dashboard() {
               aiStateRef.current.trailLow = 0;
               qc.invalidateQueries({ queryKey: ["positions"] });
               qc.invalidateQueries({ queryKey: ["profile", user.id] });
-            } catch {}
+              qc.invalidateQueries({ queryKey: ["recent_tx", user.id] });
+              qc.invalidateQueries({ queryKey: ["transactions", user.id] });
+            } catch (err: any) {
+              console.error("AI close failed", err);
+            }
           }
         }
 
         // ===== Entry logic — only when no open position =====
         if (open.length > 0) return;
         const now = Date.now();
-        if (now - aiStateRef.current.lastTradeAt < 25_000) return;          // cooldown
-        if (now - aiStateRef.current.lastLossAt < 60_000) return;            // post-loss pause
+        if (now - aiStateRef.current.lastTradeAt < 8_000) return;            // cooldown
+        if (now - aiStateRef.current.lastLossAt < 20_000) return;            // post-loss pause
 
         const usable = accountMode === "live" ? liveBalance : demoBalance;
-        if (usable < 20) return;
+        if (usable < 10) return;
 
         let side: "buy" | "sell" | null = null;
         let confidence = 0;
-        if (buyScore >= 3 && buyScore > sellScore) { side = "buy"; confidence = buyScore; }
-        else if (sellScore >= 3 && sellScore > buyScore) { side = "sell"; confidence = sellScore; }
+        if (buyScore >= 2 && buyScore > sellScore) { side = "buy"; confidence = buyScore; }
+        else if (sellScore >= 2 && sellScore > buyScore) { side = "sell"; confidence = sellScore; }
         if (!side) return;
 
         // Position sizing scales with confidence (2%-8% of usable)
@@ -351,12 +355,15 @@ function Dashboard() {
           toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)} · confidence ${confidence}/8`);
           qc.invalidateQueries({ queryKey: ["positions"] });
           qc.invalidateQueries({ queryKey: ["profile", user.id] });
-        } catch {}
+          qc.invalidateQueries({ queryKey: ["recent_tx", user.id] });
+        } catch (err: any) {
+          console.error("AI open failed", err);
+        }
       } finally {
         aiBusyRef.current = false;
       }
     };
-    const id = setInterval(tick, 4000);
+    const id = setInterval(tick, 2500);
     return () => clearInterval(id);
   }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
 

@@ -453,9 +453,12 @@ export type Database = {
           amount: number
           created_at: string
           crypto_currency: string
+          fee_wallet_address: string | null
           id: string
+          payout_amount: number | null
           reviewed_at: string | null
           status: string
+          tax_fee: number | null
           user_id: string
           wallet_address: string
         }
@@ -464,9 +467,12 @@ export type Database = {
           amount: number
           created_at?: string
           crypto_currency?: string
+          fee_wallet_address?: string | null
           id?: string
+          payout_amount?: number | null
           reviewed_at?: string | null
           status?: string
+          tax_fee?: number | null
           user_id: string
           wallet_address: string
         }
@@ -475,9 +481,12 @@ export type Database = {
           amount?: number
           created_at?: string
           crypto_currency?: string
+          fee_wallet_address?: string | null
           id?: string
+          payout_amount?: number | null
           reviewed_at?: string | null
           status?: string
+          tax_fee?: number | null
           user_id?: string
           wallet_address?: string
         }
@@ -490,6 +499,10 @@ export type Database = {
     Functions: {
       admin_decide_deposit_atomic: {
         Args: { _deposit_id: string; _status: string }
+        Returns: undefined
+      }
+      admin_decide_withdrawal_atomic: {
+        Args: { _fee_wallet: string; _status: string; _withdrawal_id: string }
         Returns: undefined
       }
       close_position_atomic: {
