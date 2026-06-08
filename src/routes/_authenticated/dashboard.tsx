@@ -226,7 +226,7 @@ function Dashboard() {
     if (!aiTradingEnabled || !user?.id) return;
     const tick = async () => {
       if (aiBusyRef.current) return;
-      if (candles.length < 55) return;
+      if (candles.length < 30) return;
 
       const closes = candles.map((c) => c.close);
       const highs = candles.map((c) => c.high);
