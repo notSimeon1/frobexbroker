@@ -330,16 +330,16 @@ function Dashboard() {
         // ===== Entry logic — only when no open position =====
         if (open.length > 0) return;
         const now = Date.now();
-        if (now - aiStateRef.current.lastTradeAt < 25_000) return;          // cooldown
-        if (now - aiStateRef.current.lastLossAt < 60_000) return;            // post-loss pause
+        if (now - aiStateRef.current.lastTradeAt < 8_000) return;            // cooldown
+        if (now - aiStateRef.current.lastLossAt < 20_000) return;            // post-loss pause
 
         const usable = accountMode === "live" ? liveBalance : demoBalance;
-        if (usable < 20) return;
+        if (usable < 10) return;
 
         let side: "buy" | "sell" | null = null;
         let confidence = 0;
-        if (buyScore >= 3 && buyScore > sellScore) { side = "buy"; confidence = buyScore; }
-        else if (sellScore >= 3 && sellScore > buyScore) { side = "sell"; confidence = sellScore; }
+        if (buyScore >= 2 && buyScore > sellScore) { side = "buy"; confidence = buyScore; }
+        else if (sellScore >= 2 && sellScore > buyScore) { side = "sell"; confidence = sellScore; }
         if (!side) return;
 
         // Position sizing scales with confidence (2%-8% of usable)
