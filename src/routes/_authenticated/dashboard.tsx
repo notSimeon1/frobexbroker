@@ -355,12 +355,15 @@ function Dashboard() {
           toast.success(`🤖 AI ${side.toUpperCase()} ${assetSym} @ $${price.toFixed(2)} · confidence ${confidence}/8`);
           qc.invalidateQueries({ queryKey: ["positions"] });
           qc.invalidateQueries({ queryKey: ["profile", user.id] });
-        } catch {}
+          qc.invalidateQueries({ queryKey: ["recent_tx", user.id] });
+        } catch (err: any) {
+          console.error("AI open failed", err);
+        }
       } finally {
         aiBusyRef.current = false;
       }
     };
-    const id = setInterval(tick, 4000);
+    const id = setInterval(tick, 2500);
     return () => clearInterval(id);
   }, [aiTradingEnabled, user?.id, candles, assetSym, accountMode, liveBalance, demoBalance, openPositionFn, closePositionFn, qc]);
 
