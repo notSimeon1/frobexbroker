@@ -63,7 +63,7 @@ function KycPage() {
         document_url: path,
       });
       if (error) throw error;
-      await supabase.from("profiles").update({ kyc_status: "pending" }).eq("id", user!.id);
+      await supabase.rpc("submit_kyc_pending" as never);
       toast.success("KYC submitted — under review");
       setFile(null); setFullName(""); setDob(""); setCountry("");
       refetch(); refetchProfile();
