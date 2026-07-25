@@ -52,25 +52,8 @@ function AssetCard({ asset }: { asset: any }) {
     if (!usd || usd <= 0) { toast.error("Enter a valid amount"); return; }
     setBusy(true);
     try {
-      const { data: profile, error: pErr } = await supabase.from("profiles").select("available_cash").eq("id", user!.id).single();
-      if (pErr) throw pErr;
-      const cash = Number(profile.available_cash);
-      if (usd > cash) { toast.error("Insufficient available cash"); return; }
-      const quantity = usd / Number(asset.current_price);
-
-      const { data: existing } = await supabase.from("user_investments").select("*").eq("user_id", user!.id).eq("asset_id", asset.id).maybeSingle();
-      if (existing) {
-        const newQty = Number(existing.quantity) + quantity;
-        const newAvg = ((Number(existing.quantity) * Number(existing.average_buy_price)) + usd) / newQty;
-        await supabase.from("user_investments").update({ quantity: newQty, average_buy_price: newAvg }).eq("id", existing.id);
-      } else {
-        await supabase.from("user_investments").insert({ user_id: user!.id, asset_id: asset.id, quantity, average_buy_price: asset.current_price });
-      }
-      await supabase.from("transactions").insert({
-        user_id: user!.id, asset_id: asset.id, asset_name: `${asset.ticker} — ${asset.name}`,
-        type: "Buy", amount: usd, quantity, status: "completed",
-      });
-      await supabase.from("profiles").update({ available_cash: cash - usd, updated_at: new Date().toISOString() }).eq("id", user!.id);
+      const { error: rpcErr } = await supabase.rpc("buy_asset_atomic" as never, { _asset_id: asset.id, _usd: usd } as never);
+      if (rpcErr) throw rpcErr;
 
       qc.invalidateQueries({ queryKey: ["holdings"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
