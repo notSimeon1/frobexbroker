@@ -28,6 +28,7 @@ const schema = z.object({
 function AuthPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,9 +36,14 @@ function AuthPage() {
   const [country, setCountry] = useState("Australia");
   const [busy, setBusy] = useState(false);
 
+  const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/dashboard" });
-  }, [user, loading, navigate]);
+    if (!loading && user) {
+      if (returnTo === "/dashboard") navigate({ to: "/dashboard" });
+      else window.location.href = returnTo;
+    }
+  }, [user, loading, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +58,7 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email, password,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}${returnTo}`,
             data: { full_name: fullName, country },
           },
         });
@@ -63,7 +69,8 @@ function AuthPage() {
         if (error) throw error;
         toast.success("Welcome back.");
       }
-      navigate({ to: "/dashboard" });
+      if (returnTo === "/dashboard") navigate({ to: "/dashboard" });
+      else window.location.href = returnTo;
     } catch (err: any) {
       toast.error(err.message ?? "Authentication failed");
     } finally {
