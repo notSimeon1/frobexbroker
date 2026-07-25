@@ -505,6 +505,10 @@ export type Database = {
         Args: { _fee_wallet: string; _status: string; _withdrawal_id: string }
         Returns: undefined
       }
+      buy_asset_atomic: {
+        Args: { _asset_id: string; _usd: number }
+        Returns: undefined
+      }
       close_position_atomic: {
         Args: { _close_price: number; _position_id: string }
         Returns: number
@@ -529,6 +533,7 @@ export type Database = {
         }
         Returns: string
       }
+      submit_kyc_pending: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"
