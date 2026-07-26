@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Navbar } from "@/components/Navbar";
+import { LiveChatWidget } from "@/components/LiveChatWidget";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -27,7 +28,8 @@ function AuthenticatedLayout() {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <main className="mx-auto max-w-7xl px-6 py-8"><Outlet /></main>
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8"><Outlet /></main>
+      <LiveChatWidget />
     </div>
   );
 }
