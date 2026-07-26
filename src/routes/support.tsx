@@ -1,107 +1,139 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { z } from "zod";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Send, Paperclip, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Headphones } from "lucide-react";
-import { notifyComplaint } from "@/lib/complaints.functions";
 
 export const Route = createFileRoute("/support")({
   component: SupportPage,
-  head: () => ({ meta: [{ title: "Support — Frobex" }] }),
+  head: () => ({ meta: [
+    { title: "Support Live Chat — Frobex" },
+    { name: "description", content: "Chat live with Frobex customer support." },
+    { property: "og:title", content: "Support Live Chat — Frobex" },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ]}),
 });
 
-const schema = z.object({
-  name: z.string().trim().min(1).max(100),
-  email: z.string().trim().email().max(255),
-  subject: z.string().trim().min(3).max(150),
-  message: z.string().trim().min(10).max(2000),
-});
+type Msg = { id: string; thread_id: string; user_id: string; sender: "user" | "support" | "bot"; body: string; attachment_url?: string | null; created_at: string; is_read: boolean };
+
+const QUICK = ["Deposit Help", "Withdrawal Status", "KYC Verification", "Trade Issue"];
 
 function SupportPage() {
   const { user } = useAuth();
-  const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = schema.safeParse(form);
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
-    setBusy(true);
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      let { data: thread } = await supabase.from("support_threads").select("*").eq("user_id", user.id).maybeSingle();
+      if (!thread) {
+        const res = await supabase.from("support_threads").insert({ user_id: user.id, subject: "Customer Support" }).select().maybeSingle();
+        thread = res.data as any;
+        if (thread) {
+          const first = user.user_metadata?.full_name?.split(" ")[0] || "there";
+          await supabase.from("support_messages").insert({ thread_id: thread.id, user_id: user.id, sender: "bot",
+            body: `Hello ${first}! Welcome to Frobex Support. How can we assist you with your trading account or deposits today?` });
+        }
+      }
+      if (!thread) return;
+      setThreadId(thread.id);
+      const { data: msgs } = await supabase.from("support_messages").select("*").eq("thread_id", thread.id).order("created_at");
+      setMessages((msgs as Msg[]) ?? []);
+    })();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    const ch = supabase.channel("support-page-" + threadId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${threadId}` }, (p) => {
+        const m = p.new as Msg;
+        setMessages((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, m]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [threadId]);
+
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [messages]);
+
+  const send = async (body: string) => {
+    if (!body.trim() || !user || !threadId) return;
+    setSending(true);
     try {
-      const { error } = await supabase.from("complaints").insert({
-        user_id: user?.id ?? null,
-        name: parsed.data.name,
-        email: parsed.data.email,
-        subject: parsed.data.subject,
-        message: parsed.data.message,
-      });
+      const { error } = await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: body.trim() });
       if (error) throw error;
-      // Fire-and-forget email forwarding
-      notifyComplaint({ data: parsed.data }).catch((err) => console.warn("email forward failed", err));
-      setDone(true);
-      toast.success("Ticket received. We'll be in touch.");
-      setForm({ name: "", email: "", subject: "", message: "" });
-    } catch (err: any) {
-      toast.error(err.message ?? "Could not submit ticket");
-    } finally {
-      setBusy(false);
-    }
+      setText("");
+    } catch (e: any) { toast.error(e.message ?? "Could not send"); }
+    finally { setSending(false); }
+  };
+
+  const upload = async (file: File) => {
+    if (!user || !threadId) return;
+    const path = `${user.id}/${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from("support-attachments").upload(path, file);
+    if (error) { toast.error(error.message); return; }
+    const { data } = await supabase.storage.from("support-attachments").createSignedUrl(path, 60 * 60 * 24);
+    await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: `📎 ${file.name}`, attachment_url: data?.signedUrl });
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
-      <div className="mx-auto max-w-2xl px-6 py-12">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-hero shadow-glow">
-            <Headphones className="h-6 w-6 text-primary-foreground" />
+      <main className="flex flex-1 flex-col mx-auto w-full max-w-3xl px-4 py-4">
+        <div className="rounded-2xl border border-border bg-card flex flex-1 flex-col overflow-hidden shadow-elegant">
+          <div className="flex items-center gap-3 border-b border-border bg-gradient-hero/15 px-4 py-3">
+            <div className="h-10 w-10 rounded-full bg-gradient-hero flex items-center justify-center text-primary-foreground font-bold">CS</div>
+            <div>
+              <div className="font-semibold">Customer Support</div>
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                Online • Typically replies instantly
+              </div>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold">How can we help?</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Send us a ticket. Our team responds within 1 business day.</p>
-        </div>
 
-        {done ? (
-          <div className="rounded-2xl border border-success/30 bg-success/5 p-10 text-center shadow-sm">
-            <CheckCircle2 className="mx-auto h-12 w-12 text-success" />
-            <h2 className="mt-4 text-xl font-semibold">Ticket submitted</h2>
-            <p className="mt-2 text-sm text-muted-foreground">We received your message and notified our support team.</p>
-            <Button className="mt-6" variant="outline" onClick={() => setDone(false)}>Submit another</Button>
+          <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto bg-background/30 px-4 py-4">
+            {!user && <p className="text-center text-sm text-muted-foreground">Sign in to start a live chat.</p>}
+            {messages.map((m) => (
+              <div key={m.id} className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.sender === "user" ? "bg-gradient-hero text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"}`}>
+                  <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                  {m.attachment_url && <a href={m.attachment_url} target="_blank" rel="noreferrer" className="mt-1 block text-[11px] underline">Open attachment</a>}
+                  <div className="mt-1 text-[10px] opacity-60">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                </div>
+              </div>
+            ))}
+            {messages.length <= 1 && user && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {QUICK.map((q) => (
+                  <button key={q} onClick={() => send(q)} className="rounded-full border border-border bg-card px-3 py-1 text-xs hover:bg-accent">{q}</button>
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <form onSubmit={submit} className="rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="name">Full name</Label>
-                <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={100} />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required maxLength={255} />
-              </div>
+
+          {user && (
+            <div className="flex items-center gap-2 border-t border-border p-2">
+              <input ref={fileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+              <Button variant="ghost" size="icon" onClick={() => fileRef.current?.click()}><Paperclip className="h-4 w-4" /></Button>
+              <input value={text} onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(text); } }}
+                placeholder="Type your message…" className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground" />
+              <Button onClick={() => send(text)} disabled={sending || !text.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
             </div>
-            <div>
-              <Label htmlFor="subject">Subject</Label>
-              <Input id="subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} required maxLength={150} />
-            </div>
-            <div>
-              <Label htmlFor="message">Message</Label>
-              <Textarea id="message" rows={6} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} required maxLength={2000} />
-            </div>
-            <Button type="submit" className="w-full bg-gradient-hero" disabled={busy}>
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Submit ticket
-            </Button>
-          </form>
-        )}
-      </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

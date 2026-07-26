@@ -22,6 +22,8 @@ import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedKycRouteImport } from './routes/_authenticated/kyc'
 import { Route as AuthenticatedMarketRouteImport } from './routes/_authenticated/market'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
+import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
+import { Route as AuthenticatedTradeRouteImport } from './routes/_authenticated/trade'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
 import { Route as AuthenticatedWithdrawRouteImport } from './routes/_authenticated/withdraw'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
@@ -93,6 +95,16 @@ const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
   path: '/referrals',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSignalsRoute = AuthenticatedSignalsRouteImport.update({
+  id: '/signals',
+  path: '/signals',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedTradeRoute = AuthenticatedTradeRouteImport.update({
+  id: '/trade',
+  path: '/trade',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedTransactionsRoute =
   AuthenticatedTransactionsRouteImport.update({
     id: '/transactions',
@@ -129,6 +141,8 @@ export interface FileRoutesByFullPath {
   '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
   '/referrals': typeof AuthenticatedReferralsRoute
+  '/signals': typeof AuthenticatedSignalsRoute
+  '/trade': typeof AuthenticatedTradeRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -147,6 +161,8 @@ export interface FileRoutesByTo {
   '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
   '/referrals': typeof AuthenticatedReferralsRoute
+  '/signals': typeof AuthenticatedSignalsRoute
+  '/trade': typeof AuthenticatedTradeRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/withdraw': typeof AuthenticatedWithdrawRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -167,6 +183,8 @@ export interface FileRoutesById {
   '/_authenticated/kyc': typeof AuthenticatedKycRoute
   '/_authenticated/market': typeof AuthenticatedMarketRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
+  '/_authenticated/signals': typeof AuthenticatedSignalsRoute
+  '/_authenticated/trade': typeof AuthenticatedTradeRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
   '/_authenticated/withdraw': typeof AuthenticatedWithdrawRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -187,6 +205,8 @@ export interface FileRouteTypes {
     | '/kyc'
     | '/market'
     | '/referrals'
+    | '/signals'
+    | '/trade'
     | '/transactions'
     | '/withdraw'
     | '/.lovable/oauth/consent'
@@ -205,6 +225,8 @@ export interface FileRouteTypes {
     | '/kyc'
     | '/market'
     | '/referrals'
+    | '/signals'
+    | '/trade'
     | '/transactions'
     | '/withdraw'
     | '/.lovable/oauth/consent'
@@ -224,6 +246,8 @@ export interface FileRouteTypes {
     | '/_authenticated/kyc'
     | '/_authenticated/market'
     | '/_authenticated/referrals'
+    | '/_authenticated/signals'
+    | '/_authenticated/trade'
     | '/_authenticated/transactions'
     | '/_authenticated/withdraw'
     | '/.lovable/oauth/consent'
@@ -335,6 +359,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReferralsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/signals': {
+      id: '/_authenticated/signals'
+      path: '/signals'
+      fullPath: '/signals'
+      preLoaderRoute: typeof AuthenticatedSignalsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/trade': {
+      id: '/_authenticated/trade'
+      path: '/trade'
+      fullPath: '/trade'
+      preLoaderRoute: typeof AuthenticatedTradeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/transactions': {
       id: '/_authenticated/transactions'
       path: '/transactions'
@@ -373,6 +411,8 @@ interface AuthenticatedRouteChildren {
   AuthenticatedKycRoute: typeof AuthenticatedKycRoute
   AuthenticatedMarketRoute: typeof AuthenticatedMarketRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
+  AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
+  AuthenticatedTradeRoute: typeof AuthenticatedTradeRoute
   AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute
   AuthenticatedWithdrawRoute: typeof AuthenticatedWithdrawRoute
 }
@@ -384,6 +424,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedKycRoute: AuthenticatedKycRoute,
   AuthenticatedMarketRoute: AuthenticatedMarketRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
+  AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
+  AuthenticatedTradeRoute: AuthenticatedTradeRoute,
   AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
   AuthenticatedWithdrawRoute: AuthenticatedWithdrawRoute,
 }

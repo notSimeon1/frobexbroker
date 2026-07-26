@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_balance_logs: {
+        Row: {
+          action: string
+          admin_id: string
+          amount: number
+          asset_symbol: string | null
+          balance_type: string
+          created_at: string
+          fiat_value_usd: number | null
+          id: string
+          reason: string | null
+          target_user_id: string
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          amount: number
+          asset_symbol?: string | null
+          balance_type: string
+          created_at?: string
+          fiat_value_usd?: number | null
+          id?: string
+          reason?: string | null
+          target_user_id: string
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          amount?: number
+          asset_symbol?: string | null
+          balance_type?: string
+          created_at?: string
+          fiat_value_usd?: number | null
+          id?: string
+          reason?: string | null
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -62,6 +101,57 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_deposit_methods: {
+        Row: {
+          account_name: string
+          account_number: string | null
+          bank_address: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          max_amount: number
+          method_name: string
+          method_type: string
+          min_amount: number
+          notes: string | null
+          routing_number: string | null
+          swift_code: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_name: string
+          account_number?: string | null
+          bank_address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_amount?: number
+          method_name: string
+          method_type: string
+          min_amount?: number
+          notes?: string | null
+          routing_number?: string | null
+          swift_code?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string
+          account_number?: string | null
+          bank_address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_amount?: number
+          method_name?: string
+          method_type?: string
+          min_amount?: number
+          notes?: string | null
+          routing_number?: string | null
+          swift_code?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       complaints: {
         Row: {
           created_at: string
@@ -99,9 +189,13 @@ export type Database = {
         Row: {
           admin_note: string | null
           amount: number
+          bank_method_id: string | null
           created_at: string
           crypto_currency: string
+          fiat_currency: string | null
           id: string
+          payment_method: string
+          receipt_url: string | null
           reviewed_at: string | null
           status: string
           tx_hash: string | null
@@ -110,9 +204,13 @@ export type Database = {
         Insert: {
           admin_note?: string | null
           amount: number
+          bank_method_id?: string | null
           created_at?: string
           crypto_currency?: string
+          fiat_currency?: string | null
           id?: string
+          payment_method?: string
+          receipt_url?: string | null
           reviewed_at?: string | null
           status?: string
           tx_hash?: string | null
@@ -121,15 +219,27 @@ export type Database = {
         Update: {
           admin_note?: string | null
           amount?: number
+          bank_method_id?: string | null
           created_at?: string
           crypto_currency?: string
+          fiat_currency?: string | null
           id?: string
+          payment_method?: string
+          receipt_url?: string | null
           reviewed_at?: string | null
           status?: string
           tx_hash?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "deposits_bank_method_id_fkey"
+            columns: ["bank_method_id"]
+            isOneToOne: false
+            referencedRelation: "bank_deposit_methods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kyc_submissions: {
         Row: {
@@ -251,6 +361,36 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_balance: number
@@ -262,14 +402,19 @@ export type Database = {
           chart_mode: string
           chart_seed: number
           created_at: string
+          crypto_balances: Json | null
           demo_balance: number
           full_name: string | null
           id: string
           is_suspended: boolean
           kyc_status: string
           live_balance: number
+          preferred_currency: string | null
           referral_code: string | null
           referred_by: string | null
+          signals_lifetime: boolean | null
+          signals_trial_expires_at: string | null
+          signals_trial_started_at: string | null
           updated_at: string
         }
         Insert: {
@@ -282,14 +427,19 @@ export type Database = {
           chart_mode?: string
           chart_seed?: number
           created_at?: string
+          crypto_balances?: Json | null
           demo_balance?: number
           full_name?: string | null
           id: string
           is_suspended?: boolean
           kyc_status?: string
           live_balance?: number
+          preferred_currency?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          signals_lifetime?: boolean | null
+          signals_trial_expires_at?: string | null
+          signals_trial_started_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -302,14 +452,19 @@ export type Database = {
           chart_mode?: string
           chart_seed?: number
           created_at?: string
+          crypto_balances?: Json | null
           demo_balance?: number
           full_name?: string | null
           id?: string
           is_suspended?: boolean
           kyc_status?: string
           live_balance?: number
+          preferred_currency?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          signals_lifetime?: boolean | null
+          signals_trial_expires_at?: string | null
+          signals_trial_started_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -338,6 +493,74 @@ export type Database = {
           id?: string
           referred_user_id?: string
           referrer_id?: string
+        }
+        Relationships: []
+      }
+      support_messages: {
+        Row: {
+          attachment_url: string | null
+          body: string
+          created_at: string
+          id: string
+          is_read: boolean
+          sender: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          attachment_url?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          sender: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          attachment_url?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          sender?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_threads: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          status: string
+          subject: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          status?: string
+          subject?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          status?: string
+          subject?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -497,12 +720,29 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_adjust_crypto: {
+        Args: {
+          _action: string
+          _amount: number
+          _fiat_usd?: number
+          _reason: string
+          _symbol: string
+          _target: string
+        }
+        Returns: undefined
+      }
       admin_decide_deposit_atomic: {
         Args: { _deposit_id: string; _status: string }
         Returns: undefined
       }
       admin_decide_withdrawal_atomic: {
         Args: { _fee_wallet: string; _status: string; _withdrawal_id: string }
+        Returns: undefined
+      }
+      admin_grant_admin: { Args: { _target: string }; Returns: undefined }
+      admin_revoke_admin: { Args: { _target: string }; Returns: undefined }
+      admin_set_signals_trial: {
+        Args: { _days: number; _lifetime: boolean; _target: string }
         Returns: undefined
       }
       buy_asset_atomic: {
@@ -519,6 +759,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      notify_user: {
+        Args: {
+          _message: string
+          _title: string
+          _type?: string
+          _user_id: string
+        }
+        Returns: undefined
       }
       open_position_atomic: {
         Args: {
