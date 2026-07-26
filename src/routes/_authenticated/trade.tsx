@@ -22,7 +22,7 @@ import type { Time } from "lightweight-charts";
 import { useServerFn } from "@tanstack/react-start";
 import { closePosition, openPosition } from "@/lib/admin.functions";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
+export const Route = createFileRoute("/_authenticated/trade")({
   component: Dashboard,
 });
 
