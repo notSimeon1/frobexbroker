@@ -53,6 +53,48 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_payment_methods: {
+        Row: {
+          created_at: string
+          extra: Json
+          id: string
+          identifier: string
+          identifier_label: string
+          is_active: boolean
+          method_key: string
+          method_name: string
+          recipient_name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          extra?: Json
+          id?: string
+          identifier?: string
+          identifier_label: string
+          is_active?: boolean
+          method_key: string
+          method_name: string
+          recipient_name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          extra?: Json
+          id?: string
+          identifier?: string
+          identifier_label?: string
+          is_active?: boolean
+          method_key?: string
+          method_name?: string
+          recipient_name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -152,6 +194,54 @@ export type Database = {
         }
         Relationships: []
       }
+      buy_crypto_orders: {
+        Row: {
+          asset_symbol: string
+          base_amount: number
+          created_at: string
+          crypto_amount: number
+          expires_at: string
+          gas_fee_amount: number
+          id: string
+          payment_method_key: string
+          receipt_url: string | null
+          reviewed_at: string | null
+          status: string
+          total_payable: number
+          user_id: string
+        }
+        Insert: {
+          asset_symbol: string
+          base_amount: number
+          created_at?: string
+          crypto_amount: number
+          expires_at?: string
+          gas_fee_amount?: number
+          id?: string
+          payment_method_key: string
+          receipt_url?: string | null
+          reviewed_at?: string | null
+          status?: string
+          total_payable: number
+          user_id: string
+        }
+        Update: {
+          asset_symbol?: string
+          base_amount?: number
+          created_at?: string
+          crypto_amount?: number
+          expires_at?: string
+          gas_fee_amount?: number
+          id?: string
+          payment_method_key?: string
+          receipt_url?: string | null
+          reviewed_at?: string | null
+          status?: string
+          total_payable?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       complaints: {
         Row: {
           created_at: string
@@ -185,19 +275,72 @@ export type Database = {
         }
         Relationships: []
       }
+      copy_trading_tiers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          monthly_roi_max: number
+          monthly_roi_min: number
+          perks: Json
+          required_capital: number
+          sort_order: number
+          strategist_name: string
+          tier_key: string
+          tier_name: string
+          updated_at: string
+          win_rate: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          monthly_roi_max: number
+          monthly_roi_min: number
+          perks?: Json
+          required_capital: number
+          sort_order?: number
+          strategist_name: string
+          tier_key: string
+          tier_name: string
+          updated_at?: string
+          win_rate: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          monthly_roi_max?: number
+          monthly_roi_min?: number
+          perks?: Json
+          required_capital?: number
+          sort_order?: number
+          strategist_name?: string
+          tier_key?: string
+          tier_name?: string
+          updated_at?: string
+          win_rate?: number
+        }
+        Relationships: []
+      }
       deposits: {
         Row: {
           admin_note: string | null
           amount: number
           bank_method_id: string | null
+          base_amount: number | null
           created_at: string
           crypto_currency: string
+          expires_at: string | null
           fiat_currency: string | null
+          gas_fee_amount: number | null
           id: string
           payment_method: string
+          payment_method_key: string | null
           receipt_url: string | null
           reviewed_at: string | null
           status: string
+          total_payable: number | null
           tx_hash: string | null
           user_id: string
         }
@@ -205,14 +348,19 @@ export type Database = {
           admin_note?: string | null
           amount: number
           bank_method_id?: string | null
+          base_amount?: number | null
           created_at?: string
           crypto_currency?: string
+          expires_at?: string | null
           fiat_currency?: string | null
+          gas_fee_amount?: number | null
           id?: string
           payment_method?: string
+          payment_method_key?: string | null
           receipt_url?: string | null
           reviewed_at?: string | null
           status?: string
+          total_payable?: number | null
           tx_hash?: string | null
           user_id: string
         }
@@ -220,14 +368,19 @@ export type Database = {
           admin_note?: string | null
           amount?: number
           bank_method_id?: string | null
+          base_amount?: number | null
           created_at?: string
           crypto_currency?: string
+          expires_at?: string | null
           fiat_currency?: string | null
+          gas_fee_amount?: number | null
           id?: string
           payment_method?: string
+          payment_method_key?: string | null
           receipt_url?: string | null
           reviewed_at?: string | null
           status?: string
+          total_payable?: number | null
           tx_hash?: string | null
           user_id?: string
         }
@@ -391,6 +544,143 @@ export type Database = {
         }
         Relationships: []
       }
+      p2p_messages: {
+        Row: {
+          connection_id: string
+          created_at: string
+          id: string
+          is_read: boolean
+          message_text: string
+          sender_id: string
+        }
+        Insert: {
+          connection_id: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message_text: string
+          sender_id: string
+        }
+        Update: {
+          connection_id?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message_text?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "p2p_messages_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "referral_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_announcements: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          is_urgent: boolean
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          content: string
+          created_at?: string
+          id?: string
+          is_urgent?: boolean
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_urgent?: boolean
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          category: string
+          description: string | null
+          id: string
+          key_name: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          category: string
+          description?: string | null
+          id?: string
+          key_name: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          category?: string
+          description?: string | null
+          id?: string
+          key_name?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      pre_market_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          listing_price: number
+          min_allocation: number
+          perks: Json
+          pool_cap: number
+          sort_order: number
+          symbol: string
+          tge_date: string
+          token_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          listing_price: number
+          min_allocation?: number
+          perks?: Json
+          pool_cap: number
+          sort_order?: number
+          symbol: string
+          tge_date: string
+          token_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          listing_price?: number
+          min_allocation?: number
+          perks?: Json
+          pool_cap?: number
+          sort_order?: number
+          symbol?: string
+          tge_date?: string
+          token_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_balance: number
@@ -466,6 +756,30 @@ export type Database = {
           signals_trial_expires_at?: string | null
           signals_trial_started_at?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      referral_connections: {
+        Row: {
+          created_at: string
+          id: string
+          referee_id: string
+          sponsor_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          referee_id: string
+          sponsor_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          referee_id?: string
+          sponsor_id?: string
+          status?: string
         }
         Relationships: []
       }
@@ -564,6 +878,102 @@ export type Database = {
         }
         Relationships: []
       }
+      trading_bots: {
+        Row: {
+          capital_required: number
+          created_at: string
+          duration_days: number
+          id: string
+          max_roi: number
+          min_roi: number
+          name: string
+          perks: Json
+          sort_order: number
+          status: string
+          tier_key: string
+          updated_at: string
+          win_rate: number
+        }
+        Insert: {
+          capital_required: number
+          created_at?: string
+          duration_days?: number
+          id?: string
+          max_roi: number
+          min_roi: number
+          name: string
+          perks?: Json
+          sort_order?: number
+          status?: string
+          tier_key: string
+          updated_at?: string
+          win_rate?: number
+        }
+        Update: {
+          capital_required?: number
+          created_at?: string
+          duration_days?: number
+          id?: string
+          max_roi?: number
+          min_roi?: number
+          name?: string
+          perks?: Json
+          sort_order?: number
+          status?: string
+          tier_key?: string
+          updated_at?: string
+          win_rate?: number
+        }
+        Relationships: []
+      }
+      trading_signals: {
+        Row: {
+          asset_pair: string
+          confidence: number
+          created_at: string
+          direction: string
+          entry_high: number
+          entry_low: number
+          id: string
+          leverage: string
+          status: string
+          stop_loss: number
+          tp_1: number | null
+          tp_2: number | null
+          tp_3: number | null
+        }
+        Insert: {
+          asset_pair: string
+          confidence?: number
+          created_at?: string
+          direction: string
+          entry_high: number
+          entry_low: number
+          id?: string
+          leverage?: string
+          status?: string
+          stop_loss: number
+          tp_1?: number | null
+          tp_2?: number | null
+          tp_3?: number | null
+        }
+        Update: {
+          asset_pair?: string
+          confidence?: number
+          created_at?: string
+          direction?: string
+          entry_high?: number
+          entry_low?: number
+          id?: string
+          leverage?: string
+          status?: string
+          stop_loss?: number
+          tp_1?: number | null
+          tp_2?: number | null
+          tp_3?: number | null
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -614,6 +1024,112 @@ export type Database = {
           },
         ]
       }
+      user_active_bots: {
+        Row: {
+          activation_date: string
+          bot_id: string
+          created_at: string
+          current_profit: number
+          expiration_date: string
+          id: string
+          invested_amount: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          activation_date?: string
+          bot_id: string
+          created_at?: string
+          current_profit?: number
+          expiration_date: string
+          id?: string
+          invested_amount: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          activation_date?: string
+          bot_id?: string
+          created_at?: string
+          current_profit?: number
+          expiration_date?: string
+          id?: string
+          invested_amount?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_active_bots_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "trading_bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_copy_allocations: {
+        Row: {
+          allocated_amount: number
+          created_at: string
+          current_profit: number
+          id: string
+          status: string
+          tier_id: string
+          user_id: string
+        }
+        Insert: {
+          allocated_amount: number
+          created_at?: string
+          current_profit?: number
+          id?: string
+          status?: string
+          tier_id: string
+          user_id: string
+        }
+        Update: {
+          allocated_amount?: number
+          created_at?: string
+          current_profit?: number
+          id?: string
+          status?: string
+          tier_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_copy_allocations_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "copy_trading_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_crypto_balances: {
+        Row: {
+          asset_symbol: string
+          balance: number
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_symbol: string
+          balance?: number
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_symbol?: string
+          balance?: number
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_investments: {
         Row: {
           asset_id: string
@@ -649,6 +1165,77 @@ export type Database = {
           },
         ]
       }
+      user_market_overrides: {
+        Row: {
+          asset_symbol: string
+          custom_percentage: number | null
+          custom_price: number | null
+          feed_mode: string
+          id: string
+          trend_direction: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_symbol: string
+          custom_percentage?: number | null
+          custom_price?: number | null
+          feed_mode?: string
+          id?: string
+          trend_direction?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_symbol?: string
+          custom_percentage?: number | null
+          custom_price?: number | null
+          feed_mode?: string
+          id?: string
+          trend_direction?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_pre_market_allocations: {
+        Row: {
+          created_at: string
+          id: string
+          status: string
+          token_id: string
+          tokens_allocated: number
+          usd_invested: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          status?: string
+          token_id: string
+          tokens_allocated: number
+          usd_invested: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          status?: string
+          token_id?: string
+          tokens_allocated?: number
+          usd_invested?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_pre_market_allocations_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "pre_market_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -669,6 +1256,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_signal_credits: {
+        Row: {
+          signals_remaining: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          signals_remaining?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          signals_remaining?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_unlocked_signals: {
+        Row: {
+          created_at: string
+          id: string
+          signal_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          signal_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          signal_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_unlocked_signals_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "trading_signals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       withdrawals: {
         Row: {
@@ -783,6 +1417,7 @@ export type Database = {
         Returns: string
       }
       submit_kyc_pending: { Args: never; Returns: undefined }
+      unlock_signal: { Args: { _signal_id: string }; Returns: number }
     }
     Enums: {
       app_role: "admin" | "user"
