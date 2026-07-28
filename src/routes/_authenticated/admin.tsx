@@ -208,7 +208,7 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
   );
 }
 
-function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
+function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boolean; onChange: () => void | Promise<unknown> }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
   const toggleMode = useServerFn(toggleAdminAccountMode);
