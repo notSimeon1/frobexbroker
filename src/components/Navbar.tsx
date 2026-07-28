@@ -112,8 +112,8 @@ export function Navbar() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Button asChild variant="ghost" size="sm"><Link to="/auth">Sign in</Link></Button>
-              <Button asChild size="sm"><Link to="/auth">Get started</Link></Button>
+              <Button asChild variant="ghost" size="sm"><Link to="/auth" search={{ next: "" }}>Sign in</Link></Button>
+              <Button asChild size="sm"><Link to="/auth" search={{ next: "" }}>Get started</Link></Button>
             </div>
           )}
         </div>
