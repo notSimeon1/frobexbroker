@@ -291,6 +291,24 @@ function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boo
           <label className="flex items-center justify-between gap-3"><span>Live mode</span><Switch checked={user.account_mode === "live"} onCheckedChange={setAccountMode} /></label>
           <label className="flex items-center justify-between gap-3"><span>AI trading</span><Switch checked={!!user.ai_trading_enabled} onCheckedChange={setAiTrading} /></label>
           <label className="flex items-center justify-between gap-3"><span className="flex items-center gap-1"><Ban className="h-3 w-3" /> Suspend</span><Switch checked={!!user.is_suspended} onCheckedChange={setSuspended} /></label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-primary" /> Admin access</span>
+            <Switch
+              checked={!!isAdminUser}
+              disabled={user.email?.toLowerCase?.() === OWNER_EMAIL}
+              onCheckedChange={async (checked) => {
+                try {
+                  const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
+                  const { error } = await supabase.rpc(fn as never, { _target: user.id } as never);
+                  if (error) throw error;
+                  toast.success(checked ? "Admin access granted" : "Admin access revoked");
+                  await onChange();
+                } catch (err: any) {
+                  toast.error(err.message ?? "Could not update role");
+                }
+              }}
+            />
+          </label>
         </div>
       </div>
 
