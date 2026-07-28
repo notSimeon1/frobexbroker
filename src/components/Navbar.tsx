@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, LineChart, Store,
   ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles,
-  Headphones, Megaphone, Mail, User, ChevronDown, HelpCircle, Gift, Play, ShoppingCart, MinusSquare, Zap, Cpu, Layers,
+  Headphones, Megaphone, Mail, User, ChevronDown, HelpCircle, Gift, Play, ShoppingCart, MinusSquare, Zap, Cpu, Layers, Bitcoin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "./NotificationBell";
@@ -38,6 +38,7 @@ export function Navbar() {
       { to: "/trade", label: "Trade / Chart", icon: <LineChart className="h-4 w-4" /> },
     ]},
     { title: "MANAGE ASSETS", items: [
+      { to: "/buy-bitcoin", label: "Buy Bitcoin", icon: <Bitcoin className="h-4 w-4" />, badge: { label: "Instant", tone: "gold" } },
       { to: "/market", label: "Buy / Sell", icon: <ShoppingCart className="h-4 w-4" /> },
       { to: "/deposit", label: "Deposit", icon: <ArrowDownToLine className="h-4 w-4" /> },
       { to: "/withdraw", label: "Withdraw", icon: <ArrowUpFromLine className="h-4 w-4" /> },

@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu } from "lucide-react";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -103,6 +103,7 @@ function AdminPage() {
           <TabsTrigger value="premarket" className="shrink-0"><Layers className="mr-1 h-3.5 w-3.5" />Pre-Market</TabsTrigger>
           <TabsTrigger value="announcements" className="shrink-0"><Megaphone className="mr-1 h-3.5 w-3.5" />Announcements</TabsTrigger>
           <TabsTrigger value="signals" className="shrink-0"><Radio className="mr-1 h-3.5 w-3.5" />Signals</TabsTrigger>
+          <TabsTrigger value="support" className="shrink-0"><Headphones className="mr-1 h-3.5 w-3.5" />Support</TabsTrigger>
           <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
         </TabsList>
 
@@ -118,6 +119,7 @@ function AdminPage() {
         <TabsContent value="premarket"><AdminPreMarketTab /></TabsContent>
         <TabsContent value="announcements"><AdminAnnouncementsTab /></TabsContent>
         <TabsContent value="signals"><AdminSignalsTab /></TabsContent>
+        <TabsContent value="support"><AdminSupportTab /></TabsContent>
       </Tabs>
     </motion.div>
   );
@@ -188,17 +190,27 @@ function RequestList({ items, users, loading, kind, onDecide }: { items?: any[];
 }
 
 function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const rolesQuery = useQuery({
+    queryKey: ["admin_role_ids"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+      return new Set((data ?? []).map((r: any) => r.user_id as string));
+    },
+    refetchInterval: 8000,
+  });
+  const adminIds = rolesQuery.data ?? new Set<string>();
+  const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
   if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   return (
     <div className="space-y-3">
-      {users?.map((u: any) => <UserRow key={u.id} user={u} onChange={refetch} />)}
+      {users?.map((u: any) => <UserRow key={u.id} user={u} isAdminUser={adminIds.has(u.id)} onChange={reload} />)}
       {!users?.length && <Card className="p-6 text-sm text-muted-foreground">No users yet.</Card>}
     </div>
   );
 }
 
-function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise<unknown> }) {
+function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boolean; onChange: () => void | Promise<unknown> }) {
   const saveUserChart = useServerFn(updateAdminChart);
   const adjustBalance = useServerFn(adjustAdminBalance);
   const toggleMode = useServerFn(toggleAdminAccountMode);
@@ -281,6 +293,24 @@ function UserRow({ user, onChange }: { user: any; onChange: () => void | Promise
           <label className="flex items-center justify-between gap-3"><span>Live mode</span><Switch checked={user.account_mode === "live"} onCheckedChange={setAccountMode} /></label>
           <label className="flex items-center justify-between gap-3"><span>AI trading</span><Switch checked={!!user.ai_trading_enabled} onCheckedChange={setAiTrading} /></label>
           <label className="flex items-center justify-between gap-3"><span className="flex items-center gap-1"><Ban className="h-3 w-3" /> Suspend</span><Switch checked={!!user.is_suspended} onCheckedChange={setSuspended} /></label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-primary" /> Admin access</span>
+            <Switch
+              checked={!!isAdminUser}
+              disabled={user.email?.toLowerCase?.() === OWNER_EMAIL}
+              onCheckedChange={async (checked) => {
+                try {
+                  const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
+                  const { error } = await supabase.rpc(fn as never, { _target: user.id } as never);
+                  if (error) throw error;
+                  toast.success(checked ? "Admin access granted" : "Admin access revoked");
+                  await onChange();
+                } catch (err: any) {
+                  toast.error(err.message ?? "Could not update role");
+                }
+              }}
+            />
+          </label>
         </div>
       </div>
 
@@ -734,3 +764,106 @@ function AdminSignalsTab() {
     </Card>
   );
 }
+
+function AdminSupportTab() {
+  const [threads, setThreads] = useState<any[]>([]);
+  const [users, setUsers] = useState<Record<string, any>>({});
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const loadThreads = async () => {
+    const { data } = await supabase.from("support_threads").select("*").order("last_message_at", { ascending: false, nullsFirst: false });
+    setThreads(data ?? []);
+    const ids = Array.from(new Set((data ?? []).map((t: any) => t.user_id)));
+    if (ids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", ids);
+      const map: Record<string, any> = {};
+      (profs ?? []).forEach((p: any) => { map[p.id] = p; });
+      setUsers(map);
+    }
+  };
+
+  useEffect(() => { loadThreads(); }, []);
+
+  useEffect(() => {
+    if (!activeId) { setMessages([]); return; }
+    (async () => {
+      const { data } = await supabase.from("support_messages").select("*").eq("thread_id", activeId).order("created_at");
+      setMessages(data ?? []);
+    })();
+    const ch = supabase.channel("admin-support-" + activeId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${activeId}` }, (p: any) => {
+        setMessages((prev) => prev.some((x) => x.id === p.new.id) ? prev : [...prev, p.new]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [activeId]);
+
+  const reply = async () => {
+    if (!text.trim() || !activeId) return;
+    const active = threads.find((t) => t.id === activeId);
+    if (!active) return;
+    setSending(true);
+    try {
+      const { error } = await supabase.from("support_messages").insert({
+        thread_id: activeId, user_id: active.user_id, sender: "support", body: text.trim(),
+      });
+      if (error) throw error;
+      setText("");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to send");
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+      <Card className="p-3 max-h-[70vh] overflow-y-auto">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-sm font-semibold">Conversations</div>
+          <Button size="sm" variant="ghost" onClick={loadThreads}>Refresh</Button>
+        </div>
+        {threads.length === 0 && <p className="text-xs text-muted-foreground">No conversations yet.</p>}
+        <div className="space-y-1">
+          {threads.map((t) => (
+            <button key={t.id} onClick={() => setActiveId(t.id)}
+              className={`w-full rounded-md border px-3 py-2 text-left text-xs transition ${activeId === t.id ? "border-primary bg-primary/10" : "border-border bg-surface hover:bg-accent"}`}>
+              <div className="font-semibold truncate">{users[t.user_id]?.full_name ?? t.user_id.slice(0, 8)}</div>
+              <div className="text-muted-foreground">{t.subject ?? "Support"}</div>
+              <div className="text-[10px] text-muted-foreground">{t.last_message_at ? new Date(t.last_message_at).toLocaleString() : new Date(t.created_at).toLocaleString()}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card className="flex h-[70vh] flex-col overflow-hidden">
+        {!activeId ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Select a conversation to reply.</div>
+        ) : (
+          <>
+            <div className="flex-1 space-y-2 overflow-y-auto bg-background/30 p-4">
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.sender === "user" ? "justify-start" : "justify-end"}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.sender === "user" ? "bg-muted text-foreground rounded-bl-sm" : "bg-gradient-hero text-primary-foreground rounded-br-sm"}`}>
+                    <div className="text-[10px] opacity-70 mb-0.5">{m.sender === "user" ? "User" : m.sender === "bot" ? "Bot" : "Support"}</div>
+                    <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                    <div className="mt-1 text-[10px] opacity-60">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 border-t border-border p-2">
+              <Input value={text} onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); reply(); } }}
+                placeholder="Type a reply as support…" />
+              <Button onClick={reply} disabled={sending || !text.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+

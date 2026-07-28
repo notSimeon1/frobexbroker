@@ -1354,6 +1354,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accrue_daily_bot_profits: { Args: never; Returns: Json }
+      activate_bot: {
+        Args: { _bot_id: string; _invested_amount: number }
+        Returns: string
+      }
       admin_adjust_crypto: {
         Args: {
           _action: string
@@ -1365,6 +1370,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_create_pre_market_token: {
+        Args: {
+          _listing_price: number
+          _min_allocation: number
+          _perks: string
+          _pool_cap: number
+          _symbol: string
+          _tge_days: number
+          _token_name: string
+        }
+        Returns: string
+      }
       admin_decide_deposit_atomic: {
         Args: { _deposit_id: string; _status: string }
         Returns: undefined
@@ -1374,15 +1391,56 @@ export type Database = {
         Returns: undefined
       }
       admin_grant_admin: { Args: { _target: string }; Returns: undefined }
+      admin_post_announcement: {
+        Args: {
+          _category: string
+          _content: string
+          _is_urgent: boolean
+          _title: string
+        }
+        Returns: string
+      }
+      admin_post_signal: {
+        Args: {
+          _asset_pair: string
+          _confidence: number
+          _direction: string
+          _entry_high: number
+          _entry_low: number
+          _leverage: string
+          _sl: number
+          _tp1: number
+          _tp2: number
+          _tp3: number
+        }
+        Returns: string
+      }
       admin_revoke_admin: { Args: { _target: string }; Returns: undefined }
       admin_set_signals_trial: {
         Args: { _days: number; _lifetime: boolean; _target: string }
         Returns: undefined
       }
+      admin_update_platform_setting: {
+        Args: { _key_name: string; _value: string }
+        Returns: undefined
+      }
+      admin_upsert_payment_method: {
+        Args: {
+          _identifier: string
+          _identifier_label: string
+          _is_active: boolean
+          _method_key: string
+          _method_name: string
+          _recipient_name: string
+          _sort_order: number
+        }
+        Returns: string
+      }
       buy_asset_atomic: {
         Args: { _asset_id: string; _usd: number }
         Returns: undefined
       }
+      cancel_bot: { Args: { _active_bot_id: string }; Returns: undefined }
       close_position_atomic: {
         Args: { _close_price: number; _position_id: string }
         Returns: number
