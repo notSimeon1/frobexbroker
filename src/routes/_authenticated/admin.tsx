@@ -188,11 +188,21 @@ function RequestList({ items, users, loading, kind, onDecide }: { items?: any[];
 }
 
 function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const rolesQuery = useQuery({
+    queryKey: ["admin_role_ids"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
+      return new Set((data ?? []).map((r: any) => r.user_id as string));
+    },
+    refetchInterval: 8000,
+  });
+  const adminIds = rolesQuery.data ?? new Set<string>();
+  const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
   if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
 
   return (
     <div className="space-y-3">
-      {users?.map((u: any) => <UserRow key={u.id} user={u} onChange={refetch} />)}
+      {users?.map((u: any) => <UserRow key={u.id} user={u} isAdminUser={adminIds.has(u.id)} onChange={reload} />)}
       {!users?.length && <Card className="p-6 text-sm text-muted-foreground">No users yet.</Card>}
     </div>
   );
