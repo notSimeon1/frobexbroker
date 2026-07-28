@@ -764,3 +764,106 @@ function AdminSignalsTab() {
     </Card>
   );
 }
+
+function AdminSupportTab() {
+  const [threads, setThreads] = useState<any[]>([]);
+  const [users, setUsers] = useState<Record<string, any>>({});
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const loadThreads = async () => {
+    const { data } = await supabase.from("support_threads").select("*").order("last_message_at", { ascending: false, nullsFirst: false });
+    setThreads(data ?? []);
+    const ids = Array.from(new Set((data ?? []).map((t: any) => t.user_id)));
+    if (ids.length) {
+      const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", ids);
+      const map: Record<string, any> = {};
+      (profs ?? []).forEach((p: any) => { map[p.id] = p; });
+      setUsers(map);
+    }
+  };
+
+  useEffect(() => { loadThreads(); }, []);
+
+  useEffect(() => {
+    if (!activeId) { setMessages([]); return; }
+    (async () => {
+      const { data } = await supabase.from("support_messages").select("*").eq("thread_id", activeId).order("created_at");
+      setMessages(data ?? []);
+    })();
+    const ch = supabase.channel("admin-support-" + activeId)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${activeId}` }, (p: any) => {
+        setMessages((prev) => prev.some((x) => x.id === p.new.id) ? prev : [...prev, p.new]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [activeId]);
+
+  const reply = async () => {
+    if (!text.trim() || !activeId) return;
+    const active = threads.find((t) => t.id === activeId);
+    if (!active) return;
+    setSending(true);
+    try {
+      const { error } = await supabase.from("support_messages").insert({
+        thread_id: activeId, user_id: active.user_id, sender: "support", body: text.trim(),
+      });
+      if (error) throw error;
+      setText("");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to send");
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
+      <Card className="p-3 max-h-[70vh] overflow-y-auto">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-sm font-semibold">Conversations</div>
+          <Button size="sm" variant="ghost" onClick={loadThreads}>Refresh</Button>
+        </div>
+        {threads.length === 0 && <p className="text-xs text-muted-foreground">No conversations yet.</p>}
+        <div className="space-y-1">
+          {threads.map((t) => (
+            <button key={t.id} onClick={() => setActiveId(t.id)}
+              className={`w-full rounded-md border px-3 py-2 text-left text-xs transition ${activeId === t.id ? "border-primary bg-primary/10" : "border-border bg-surface hover:bg-accent"}`}>
+              <div className="font-semibold truncate">{users[t.user_id]?.full_name ?? t.user_id.slice(0, 8)}</div>
+              <div className="text-muted-foreground">{t.subject ?? "Support"}</div>
+              <div className="text-[10px] text-muted-foreground">{t.last_message_at ? new Date(t.last_message_at).toLocaleString() : new Date(t.created_at).toLocaleString()}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card className="flex h-[70vh] flex-col overflow-hidden">
+        {!activeId ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Select a conversation to reply.</div>
+        ) : (
+          <>
+            <div className="flex-1 space-y-2 overflow-y-auto bg-background/30 p-4">
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.sender === "user" ? "justify-start" : "justify-end"}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.sender === "user" ? "bg-muted text-foreground rounded-bl-sm" : "bg-gradient-hero text-primary-foreground rounded-br-sm"}`}>
+                    <div className="text-[10px] opacity-70 mb-0.5">{m.sender === "user" ? "User" : m.sender === "bot" ? "Bot" : "Support"}</div>
+                    <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                    <div className="mt-1 text-[10px] opacity-60">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 border-t border-border p-2">
+              <Input value={text} onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); reply(); } }}
+                placeholder="Type a reply as support…" />
+              <Button onClick={reply} disabled={sending || !text.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
