@@ -17,10 +17,15 @@ import { Route as SupportRouteImport } from './routes/support'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedAdminOpsRouteImport } from './routes/_authenticated/admin-ops'
+import { Route as AuthenticatedAiBotsRouteImport } from './routes/_authenticated/ai-bots'
+import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
+import { Route as AuthenticatedCopyTradingRouteImport } from './routes/_authenticated/copy-trading'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticated/deposit'
 import { Route as AuthenticatedKycRouteImport } from './routes/_authenticated/kyc'
 import { Route as AuthenticatedMarketRouteImport } from './routes/_authenticated/market'
+import { Route as AuthenticatedPreMarketRouteImport } from './routes/_authenticated/pre-market'
 import { Route as AuthenticatedReferralsRouteImport } from './routes/_authenticated/referrals'
 import { Route as AuthenticatedSignalsRouteImport } from './routes/_authenticated/signals'
 import { Route as AuthenticatedTradeRouteImport } from './routes/_authenticated/trade'
@@ -70,6 +75,28 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminOpsRoute = AuthenticatedAdminOpsRouteImport.update({
+  id: '/admin-ops',
+  path: '/admin-ops',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedAiBotsRoute = AuthenticatedAiBotsRouteImport.update({
+  id: '/ai-bots',
+  path: '/ai-bots',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedAnnouncementsRoute =
+  AuthenticatedAnnouncementsRouteImport.update({
+    id: '/announcements',
+    path: '/announcements',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedCopyTradingRoute =
+  AuthenticatedCopyTradingRouteImport.update({
+    id: '/copy-trading',
+    path: '/copy-trading',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -88,6 +115,11 @@ const AuthenticatedKycRoute = AuthenticatedKycRouteImport.update({
 const AuthenticatedMarketRoute = AuthenticatedMarketRouteImport.update({
   id: '/market',
   path: '/market',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedPreMarketRoute = AuthenticatedPreMarketRouteImport.update({
+  id: '/pre-market',
+  path: '/pre-market',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedReferralsRoute = AuthenticatedReferralsRouteImport.update({
@@ -136,10 +168,15 @@ export interface FileRoutesByFullPath {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/admin-ops': typeof AuthenticatedAdminOpsRoute
+  '/ai-bots': typeof AuthenticatedAiBotsRoute
+  '/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
   '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
+  '/pre-market': typeof AuthenticatedPreMarketRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/trade': typeof AuthenticatedTradeRoute
@@ -156,10 +193,15 @@ export interface FileRoutesByTo {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/admin-ops': typeof AuthenticatedAdminOpsRoute
+  '/ai-bots': typeof AuthenticatedAiBotsRoute
+  '/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/deposit': typeof AuthenticatedDepositRoute
   '/kyc': typeof AuthenticatedKycRoute
   '/market': typeof AuthenticatedMarketRoute
+  '/pre-market': typeof AuthenticatedPreMarketRoute
   '/referrals': typeof AuthenticatedReferralsRoute
   '/signals': typeof AuthenticatedSignalsRoute
   '/trade': typeof AuthenticatedTradeRoute
@@ -178,10 +220,15 @@ export interface FileRoutesById {
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/admin-ops': typeof AuthenticatedAdminOpsRoute
+  '/_authenticated/ai-bots': typeof AuthenticatedAiBotsRoute
+  '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/_authenticated/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/deposit': typeof AuthenticatedDepositRoute
   '/_authenticated/kyc': typeof AuthenticatedKycRoute
   '/_authenticated/market': typeof AuthenticatedMarketRoute
+  '/_authenticated/pre-market': typeof AuthenticatedPreMarketRoute
   '/_authenticated/referrals': typeof AuthenticatedReferralsRoute
   '/_authenticated/signals': typeof AuthenticatedSignalsRoute
   '/_authenticated/trade': typeof AuthenticatedTradeRoute
@@ -200,10 +247,15 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/admin'
+    | '/admin-ops'
+    | '/ai-bots'
+    | '/announcements'
+    | '/copy-trading'
     | '/dashboard'
     | '/deposit'
     | '/kyc'
     | '/market'
+    | '/pre-market'
     | '/referrals'
     | '/signals'
     | '/trade'
@@ -220,10 +272,15 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/admin'
+    | '/admin-ops'
+    | '/ai-bots'
+    | '/announcements'
+    | '/copy-trading'
     | '/dashboard'
     | '/deposit'
     | '/kyc'
     | '/market'
+    | '/pre-market'
     | '/referrals'
     | '/signals'
     | '/trade'
@@ -241,10 +298,15 @@ export interface FileRouteTypes {
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
     | '/_authenticated/admin'
+    | '/_authenticated/admin-ops'
+    | '/_authenticated/ai-bots'
+    | '/_authenticated/announcements'
+    | '/_authenticated/copy-trading'
     | '/_authenticated/dashboard'
     | '/_authenticated/deposit'
     | '/_authenticated/kyc'
     | '/_authenticated/market'
+    | '/_authenticated/pre-market'
     | '/_authenticated/referrals'
     | '/_authenticated/signals'
     | '/_authenticated/trade'
@@ -324,6 +386,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin-ops': {
+      id: '/_authenticated/admin-ops'
+      path: '/admin-ops'
+      fullPath: '/admin-ops'
+      preLoaderRoute: typeof AuthenticatedAdminOpsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/ai-bots': {
+      id: '/_authenticated/ai-bots'
+      path: '/ai-bots'
+      fullPath: '/ai-bots'
+      preLoaderRoute: typeof AuthenticatedAiBotsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/announcements': {
+      id: '/_authenticated/announcements'
+      path: '/announcements'
+      fullPath: '/announcements'
+      preLoaderRoute: typeof AuthenticatedAnnouncementsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/copy-trading': {
+      id: '/_authenticated/copy-trading'
+      path: '/copy-trading'
+      fullPath: '/copy-trading'
+      preLoaderRoute: typeof AuthenticatedCopyTradingRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -350,6 +440,13 @@ declare module '@tanstack/react-router' {
       path: '/market'
       fullPath: '/market'
       preLoaderRoute: typeof AuthenticatedMarketRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/pre-market': {
+      id: '/_authenticated/pre-market'
+      path: '/pre-market'
+      fullPath: '/pre-market'
+      preLoaderRoute: typeof AuthenticatedPreMarketRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/referrals': {
@@ -406,10 +503,15 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedAdminOpsRoute: typeof AuthenticatedAdminOpsRoute
+  AuthenticatedAiBotsRoute: typeof AuthenticatedAiBotsRoute
+  AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
+  AuthenticatedCopyTradingRoute: typeof AuthenticatedCopyTradingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDepositRoute: typeof AuthenticatedDepositRoute
   AuthenticatedKycRoute: typeof AuthenticatedKycRoute
   AuthenticatedMarketRoute: typeof AuthenticatedMarketRoute
+  AuthenticatedPreMarketRoute: typeof AuthenticatedPreMarketRoute
   AuthenticatedReferralsRoute: typeof AuthenticatedReferralsRoute
   AuthenticatedSignalsRoute: typeof AuthenticatedSignalsRoute
   AuthenticatedTradeRoute: typeof AuthenticatedTradeRoute
@@ -419,10 +521,15 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedAdminOpsRoute: AuthenticatedAdminOpsRoute,
+  AuthenticatedAiBotsRoute: AuthenticatedAiBotsRoute,
+  AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
+  AuthenticatedCopyTradingRoute: AuthenticatedCopyTradingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDepositRoute: AuthenticatedDepositRoute,
   AuthenticatedKycRoute: AuthenticatedKycRoute,
   AuthenticatedMarketRoute: AuthenticatedMarketRoute,
+  AuthenticatedPreMarketRoute: AuthenticatedPreMarketRoute,
   AuthenticatedReferralsRoute: AuthenticatedReferralsRoute,
   AuthenticatedSignalsRoute: AuthenticatedSignalsRoute,
   AuthenticatedTradeRoute: AuthenticatedTradeRoute,

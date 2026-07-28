@@ -18,6 +18,7 @@ import {
   updateAdminComplaint,
   updateAdminSetting,
 } from "@/lib/admin.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban } from "lucide-react";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -97,6 +98,11 @@ function AdminPage() {
           <TabsTrigger value="kyc" className="shrink-0">KYC Review</TabsTrigger>
           <TabsTrigger value="news" className="shrink-0">Market News</TabsTrigger>
           <TabsTrigger value="complaints" className="shrink-0">Complaints</TabsTrigger>
+          <TabsTrigger value="bots" className="shrink-0"><Bot className="mr-1 h-3.5 w-3.5" />Bots</TabsTrigger>
+          <TabsTrigger value="copy" className="shrink-0"><Users className="mr-1 h-3.5 w-3.5" />Copy</TabsTrigger>
+          <TabsTrigger value="premarket" className="shrink-0"><Layers className="mr-1 h-3.5 w-3.5" />Pre-Market</TabsTrigger>
+          <TabsTrigger value="announcements" className="shrink-0"><Megaphone className="mr-1 h-3.5 w-3.5" />Announcements</TabsTrigger>
+          <TabsTrigger value="signals" className="shrink-0"><Radio className="mr-1 h-3.5 w-3.5" />Signals</TabsTrigger>
           <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
         </TabsList>
 
@@ -107,6 +113,11 @@ function AdminPage() {
         <TabsContent value="news"><NewsTab items={overviewQuery.data?.news} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="complaints"><ComplaintsTab items={overviewQuery.data?.complaints} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="settings"><SettingsTab items={overviewQuery.data?.settings} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="bots"><AdminBotsTab /></TabsContent>
+        <TabsContent value="copy"><AdminCopyTab /></TabsContent>
+        <TabsContent value="premarket"><AdminPreMarketTab /></TabsContent>
+        <TabsContent value="announcements"><AdminAnnouncementsTab /></TabsContent>
+        <TabsContent value="signals"><AdminSignalsTab /></TabsContent>
       </Tabs>
     </motion.div>
   );
@@ -483,6 +494,243 @@ function SettingsTab({ items, loading, refetch }: { items?: any[]; loading: bool
           </div>
         </div>
       ))}
+    </Card>
+  );
+}
+
+// ============ ADMIN BOTS TAB ============
+function AdminBotsTab() {
+  const { data: bots } = useQuery({
+    queryKey: ["admin_bots_list"],
+    queryFn: async () => (await supabase.from("trading_bots").select("*").order("sort_order")).data ?? [],
+  });
+  const { data: activeBots } = useQuery({
+    queryKey: ["admin_active_bots_list"],
+    queryFn: async () => (await supabase.from("user_active_bots").select("*, trading_bots(name), profiles!inner(email)").order("created_at", { ascending: false }).limit(50)).data ?? [],
+    refetchInterval: 10000,
+  });
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Bot className="h-4 w-4 text-primary" /> Bot Tiers</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-muted-foreground">
+              <tr><th className="pb-2">Name</th><th className="pb-2">Tier</th><th className="pb-2 text-right">Capital</th><th className="pb-2 text-right">ROI</th><th className="pb-2 text-right">Win Rate</th><th className="pb-2 text-right">Duration</th></tr>
+            </thead>
+            <tbody>
+              {bots?.map((b: any) => (
+                <tr key={b.id} className="border-t border-border">
+                  <td className="py-2 font-medium">{b.name}</td>
+                  <td className="py-2"><Badge variant="secondary" className="text-[10px]">{b.tier_key}</Badge></td>
+                  <td className="py-2 text-right tabular-nums">${Number(b.capital_required).toLocaleString()}</td>
+                  <td className="py-2 text-right tabular-nums text-success">{Number(b.min_roi).toFixed(1)}-{Number(b.max_roi).toFixed(1)}%</td>
+                  <td className="py-2 text-right tabular-nums">{Number(b.win_rate).toFixed(1)}%</td>
+                  <td className="py-2 text-right">{b.duration_days}d</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Activity className="h-4 w-4 text-primary" /> Active Bot Subscriptions</h2>
+        {!activeBots?.length ? <p className="text-sm text-muted-foreground">No active bots.</p> : (
+          <div className="space-y-2">
+            {activeBots.map((ab: any) => (
+              <div key={ab.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div>
+                  <div className="font-semibold">{ab.trading_bots?.name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{(ab.profiles as any)?.email ?? "—"}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold tabular-nums">${Number(ab.invested_amount).toFixed(2)}</div>
+                  <div className="text-xs text-success">+${Number(ab.current_profit).toFixed(2)}</div>
+                </div>
+                <Badge className={ab.status === "running" ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}>{ab.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ============ ADMIN COPY TRADING TAB ============
+function AdminCopyTab() {
+  const { data: tiers } = useQuery({
+    queryKey: ["admin_copy_tiers"],
+    queryFn: async () => (await supabase.from("copy_trading_tiers").select("*").order("sort_order")).data ?? [],
+  });
+  const { data: allocations } = useQuery({
+    queryKey: ["admin_copy_allocations"],
+    queryFn: async () => (await supabase.from("user_copy_allocations").select("*, copy_trading_tiers(tier_name), profiles!inner(email)").order("created_at", { ascending: false }).limit(50)).data ?? [],
+    refetchInterval: 10000,
+  });
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Users className="h-4 w-4 text-primary" /> Copy Trading Tiers</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-muted-foreground">
+              <tr><th className="pb-2">Tier</th><th className="pb-2">Strategist</th><th className="pb-2 text-right">Capital</th><th className="pb-2 text-right">Win Rate</th><th className="pb-2 text-right">Monthly ROI</th></tr>
+            </thead>
+            <tbody>
+              {tiers?.map((t: any) => (
+                <tr key={t.id} className="border-t border-border">
+                  <td className="py-2 font-medium">{t.tier_name}</td>
+                  <td className="py-2">{t.strategist_name}</td>
+                  <td className="py-2 text-right tabular-nums">${Number(t.required_capital).toLocaleString()}</td>
+                  <td className="py-2 text-right tabular-nums">{Number(t.win_rate).toFixed(1)}%</td>
+                  <td className="py-2 text-right tabular-nums text-success">{Number(t.monthly_roi_min).toFixed(0)}-{Number(t.monthly_roi_max).toFixed(0)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Activity className="h-4 w-4 text-primary" /> User Allocations</h2>
+        {!allocations?.length ? <p className="text-sm text-muted-foreground">No allocations.</p> : (
+          <div className="space-y-2">
+            {allocations.map((a: any) => (
+              <div key={a.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div>
+                  <div className="font-semibold">{a.copy_trading_tiers?.tier_name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{(a.profiles as any)?.email ?? "—"}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold tabular-nums">${Number(a.allocated_amount).toFixed(2)}</div>
+                  <div className="text-xs text-success">+${Number(a.current_profit).toFixed(2)}</div>
+                </div>
+                <Badge className={a.status === "active" ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"}>{a.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ============ ADMIN PRE-MARKET TAB ============
+function AdminPreMarketTab() {
+  const { data: tokens } = useQuery({
+    queryKey: ["admin_premarket_tokens"],
+    queryFn: async () => (await supabase.from("pre_market_tokens").select("*").order("sort_order")).data ?? [],
+  });
+  const { data: allocations } = useQuery({
+    queryKey: ["admin_premarket_allocations"],
+    queryFn: async () => (await supabase.from("user_pre_market_allocations").select("*, pre_market_tokens(token_name, symbol), profiles!inner(email)").order("created_at", { ascending: false }).limit(50)).data ?? [],
+    refetchInterval: 10000,
+  });
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Layers className="h-4 w-4 text-primary" /> Pre-Market Tokens</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-muted-foreground">
+              <tr><th className="pb-2">Token</th><th className="pb-2">Symbol</th><th className="pb-2 text-right">Price</th><th className="pb-2 text-right">Pool Cap</th><th className="pb-2 text-right">Min Alloc</th><th className="pb-2">TGE</th></tr>
+            </thead>
+            <tbody>
+              {tokens?.map((t: any) => (
+                <tr key={t.id} className="border-t border-border">
+                  <td className="py-2 font-medium">{t.token_name}</td>
+                  <td className="py-2"><Badge variant="secondary" className="text-[10px]">{t.symbol}</Badge></td>
+                  <td className="py-2 text-right tabular-nums">${Number(t.listing_price).toFixed(4)}</td>
+                  <td className="py-2 text-right tabular-nums">${Number(t.pool_cap).toLocaleString()}</td>
+                  <td className="py-2 text-right tabular-nums">${Number(t.min_allocation).toLocaleString()}</td>
+                  <td className="py-2 text-xs">{new Date(t.tge_date).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Activity className="h-4 w-4 text-primary" /> User Allocations</h2>
+        {!allocations?.length ? <p className="text-sm text-muted-foreground">No allocations.</p> : (
+          <div className="space-y-2">
+            {allocations.map((a: any) => (
+              <div key={a.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+                <div>
+                  <div className="font-semibold">{a.pre_market_tokens?.token_name ?? "—"} ({a.pre_market_tokens?.symbol ?? "—"})</div>
+                  <div className="text-xs text-muted-foreground">{(a.profiles as any)?.email ?? "—"}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold tabular-nums">${Number(a.usd_invested).toFixed(2)}</div>
+                  <div className="text-xs text-muted-foreground">{Number(a.tokens_allocated).toFixed(2)} tokens</div>
+                </div>
+                <Badge className="bg-primary/15 text-primary">{a.status}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ============ ADMIN ANNOUNCEMENTS TAB ============
+function AdminAnnouncementsTab() {
+  const { data: announcements } = useQuery({
+    queryKey: ["admin_announcements_list"],
+    queryFn: async () => (await supabase.from("platform_announcements").select("*").order("created_at", { ascending: false }).limit(20)).data ?? [],
+    refetchInterval: 10000,
+  });
+  return (
+    <Card className="p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Megaphone className="h-4 w-4 text-primary" /> Platform Announcements</h2>
+      {!announcements?.length ? <p className="text-sm text-muted-foreground">None yet.</p> : (
+        <div className="space-y-2">
+          {announcements.map((a: any) => (
+            <div key={a.id} className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+              <div className="flex items-center gap-2">
+                {a.is_urgent && <Badge variant="destructive" className="text-[10px]">Urgent</Badge>}
+                <Badge variant="secondary" className="text-[10px]">{a.category}</Badge>
+                <span className="font-semibold">{a.title}</span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{a.content}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-xs text-muted-foreground">Post new announcements from the Admin Ops page.</p>
+    </Card>
+  );
+}
+
+// ============ ADMIN SIGNALS TAB ============
+function AdminSignalsTab() {
+  const { data: signals } = useQuery({
+    queryKey: ["admin_signals_list"],
+    queryFn: async () => (await supabase.from("trading_signals").select("*").order("created_at", { ascending: false }).limit(20)).data ?? [],
+    refetchInterval: 10000,
+  });
+  return (
+    <Card className="p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Radio className="h-4 w-4 text-primary" /> Trading Signals</h2>
+      {!signals?.length ? <p className="text-sm text-muted-foreground">None yet.</p> : (
+        <div className="space-y-2">
+          {signals.map((s: any) => (
+            <div key={s.id} className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Badge className={s.direction === "long" ? "bg-success/20 text-success" : "bg-destructive/20 text-destructive"}>{s.direction}</Badge>
+                <span className="font-semibold">{s.asset_pair}</span>
+                <Badge variant="secondary" className="text-[10px]">{s.leverage}</Badge>
+                <span className="text-xs text-muted-foreground">{Number(s.confidence).toFixed(0)}% confidence</span>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">Entry: {s.entry_low} - {s.entry_high} · SL: {s.stop_loss}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{new Date(s.created_at).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-xs text-muted-foreground">Post new signals from the Admin Ops page.</p>
     </Card>
   );
 }
