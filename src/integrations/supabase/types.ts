@@ -1354,6 +1354,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accrue_daily_bot_profits: { Args: never; Returns: Json }
+      activate_bot: {
+        Args: { _bot_id: string; _invested_amount: number }
+        Returns: string
+      }
       admin_adjust_crypto: {
         Args: {
           _action: string
@@ -1383,6 +1388,7 @@ export type Database = {
         Args: { _asset_id: string; _usd: number }
         Returns: undefined
       }
+      cancel_bot: { Args: { _active_bot_id: string }; Returns: undefined }
       close_position_atomic: {
         Args: { _close_price: number; _position_id: string }
         Returns: number
