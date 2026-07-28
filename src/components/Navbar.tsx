@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, LineChart, Store,
   ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles,
-  Headphones, Megaphone, Mail, User, ChevronDown, HelpCircle, Gift, Play, ShoppingCart, MinusSquare, Zap, Cpu, Layers,
+  Headphones, Megaphone, Mail, User, ChevronDown, HelpCircle, Gift, Play, ShoppingCart, MinusSquare, Zap, Cpu, Layers, Bitcoin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "./NotificationBell";
