@@ -103,6 +103,7 @@ function AdminPage() {
           <TabsTrigger value="premarket" className="shrink-0"><Layers className="mr-1 h-3.5 w-3.5" />Pre-Market</TabsTrigger>
           <TabsTrigger value="announcements" className="shrink-0"><Megaphone className="mr-1 h-3.5 w-3.5" />Announcements</TabsTrigger>
           <TabsTrigger value="signals" className="shrink-0"><Radio className="mr-1 h-3.5 w-3.5" />Signals</TabsTrigger>
+          <TabsTrigger value="support" className="shrink-0"><Headphones className="mr-1 h-3.5 w-3.5" />Support</TabsTrigger>
           <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
         </TabsList>
 
