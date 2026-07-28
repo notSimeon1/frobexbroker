@@ -119,6 +119,7 @@ function AdminPage() {
         <TabsContent value="premarket"><AdminPreMarketTab /></TabsContent>
         <TabsContent value="announcements"><AdminAnnouncementsTab /></TabsContent>
         <TabsContent value="signals"><AdminSignalsTab /></TabsContent>
+        <TabsContent value="support"><AdminSupportTab /></TabsContent>
       </Tabs>
     </motion.div>
   );
