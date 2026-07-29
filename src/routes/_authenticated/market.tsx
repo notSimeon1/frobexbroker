@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -11,28 +11,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchBybitCryptoPrices } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/market")({
   component: Market,
 });
 
 function Market() {
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
-
-  // Fetch live prices from Bybit public API every 5 seconds
-  useEffect(() => {
-    const getPrices = async () => {
-      const data = await fetchBybitCryptoPrices(["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT"]);
-      if (data) {
-        setLivePrices(data);
-      }
-    };
-    getPrices();
-    const interval = setInterval(getPrices, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
   const { data: assets } = useQuery({
     queryKey: ["assets"],
     queryFn: async () => {
@@ -42,27 +26,14 @@ function Market() {
     },
   });
 
-  // Merge database assets with real-time Bybit prices if available
-  const updatedAssets = assets?.map((asset: any) => {
-    // Map ticker symbols e.g. "BTC" -> "BTCUSDT"
-    const symbolKey = `${asset.ticker.toUpperCase()}USDT`;
-    if (livePrices[symbolKey]) {
-      return {
-        ...asset,
-        current_price: livePrices[symbolKey],
-      };
-    }
-    return asset;
-  });
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Asset Marketplace</h1>
-        <p className="text-sm text-muted-foreground">Browse and invest in stocks, crypto, and commodities with real-time Bybit rates.</p>
+        <p className="text-sm text-muted-foreground">Browse and invest in stocks, crypto, and commodities.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {updatedAssets?.map((a: any) => <AssetCard key={a.id} asset={a} />)}
+        {assets?.map((a: any) => <AssetCard key={a.id} asset={a} />)}
       </div>
     </div>
   );
