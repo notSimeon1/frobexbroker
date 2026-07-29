@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -8,8 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Copy, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2, Search, Bitcoin, Coins, Shield, Receipt, CircleAlert as AlertCircle } from "lucide-react";
+import {
+  Copy, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2,
+  Search, Bitcoin, Coins, Shield, Receipt, CircleAlert as AlertCircle,
+  Upload, ArrowLeft, ArrowRight, Building2, Landmark, Wallet as WalletIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -18,26 +21,32 @@ export const Route = createFileRoute("/_authenticated/deposit")({
   head: () => ({ meta: [{ title: "Deposit — Frobex" }] }),
 });
 
-type CryptoOption = { id: string; label: string; symbol: string; network: string; settingsKey: string };
+type CryptoOption = { id: string; label: string; symbol: string; network: string; settingsKey: string; icon: "btc" | "eth" | "usdt" };
 const CRYPTOS: CryptoOption[] = [
-  { id: "usdt_bep20", label: "Tether USD", symbol: "USDT", network: "BEP20 (BSC)", settingsKey: "deposit_wallet_usdt_bep20" },
-  { id: "usdt_trc20", label: "Tether USD", symbol: "USDT", network: "TRC20 (Tron)", settingsKey: "deposit_wallet_usdt_trc20" },
-  { id: "btc", label: "Bitcoin", symbol: "BTC", network: "Bitcoin", settingsKey: "deposit_wallet_btc" },
-  { id: "eth", label: "Ethereum", symbol: "ETH", network: "ERC20", settingsKey: "deposit_wallet_eth" },
+  { id: "usdt_bep20", label: "Tether USD", symbol: "USDT", network: "BEP20 (BSC)", settingsKey: "deposit_wallet_usdt_bep20", icon: "usdt" },
+  { id: "usdt_trc20", label: "Tether USD", symbol: "USDT", network: "TRC20 (Tron)", settingsKey: "deposit_wallet_usdt_trc20", icon: "usdt" },
+  { id: "btc",        label: "Bitcoin",    symbol: "BTC",  network: "Bitcoin",       settingsKey: "deposit_wallet_btc",        icon: "btc" },
+  { id: "eth",        label: "Ethereum",   symbol: "ETH",  network: "ERC20",         settingsKey: "deposit_wallet_eth",        icon: "eth" },
 ];
+
+type Step = "select" | "generating" | "instructions" | "review";
 
 function DepositPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
+
+  const [step, setStep] = useState<Step>("select");
+  const [gatewayKind, setGatewayKind] = useState<"crypto" | "bank" | null>(null);
+  const [selectedCryptoId, setSelectedCryptoId] = useState<string>("");
+  const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [amount, setAmount] = useState("");
-  const [selectedId, setSelectedId] = useState<string>("usdt_bep20");
   const [txHash, setTxHash] = useState("");
-  const [paymentMethodKey, setPaymentMethodKey] = useState("usdt_bep20");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [revealed, setRevealed] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ["app_settings"],
@@ -48,7 +57,6 @@ function DepositPage() {
       return m;
     },
   });
-
   const { data: platformSettings } = useQuery({
     queryKey: ["platform_settings"],
     queryFn: async () => {
@@ -61,15 +69,13 @@ function DepositPage() {
       return m;
     },
   });
-
-  const { data: paymentMethods } = useQuery({
-    queryKey: ["payment_methods"],
+  const { data: bankMethods } = useQuery({
+    queryKey: ["bank_methods_active"],
     queryFn: async () => {
-      const { data } = await supabase.from("admin_payment_methods").select("*").eq("is_active", true).order("sort_order");
+      const { data } = await supabase.from("bank_deposit_methods").select("*").eq("is_active", true).order("method_name");
       return data ?? [];
     },
   });
-
   const { data: deposits, refetch } = useQuery({
     queryKey: ["my_deposits", user?.id],
     queryFn: async () => {
@@ -87,7 +93,7 @@ function DepositPage() {
   const gasFeeAmount = Number((baseAmount * gasFeePercent / 100).toFixed(2));
   const totalPayable = Number((baseAmount + gasFeeAmount).toFixed(2));
 
-  const filtered = useMemo(() => {
+  const filteredCryptos = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return CRYPTOS;
     return CRYPTOS.filter((c) => `${c.label} ${c.symbol} ${c.network}`.toLowerCase().includes(q));
@@ -102,50 +108,112 @@ function DepositPage() {
     }
   };
 
-  const selected = CRYPTOS.find((c) => c.id === selectedId)!;
-  const wallet = settings?.[selected.settingsKey];
+  const selectedCrypto = CRYPTOS.find((c) => c.id === selectedCryptoId);
+  const selectedBank = (bankMethods ?? []).find((b: any) => b.id === selectedBankId);
+  const wallet = selectedCrypto ? settings?.[selectedCrypto.settingsKey] : undefined;
 
+  // 2-hour countdown, keyed to entering instructions step
+  const deadlineRef = useRef<number>(0);
+  const [remainingMs, setRemainingMs] = useState(expiryHours * 3600 * 1000);
   useEffect(() => {
-    setRevealed(false);
-    setGenerating(true);
-    const delay = 2000 + Math.random() * 3000;
-    const id = setTimeout(() => { setGenerating(false); setRevealed(true); }, delay);
-    return () => clearTimeout(id);
-  }, [selectedId]);
+    if (step !== "instructions") return;
+    deadlineRef.current = Date.now() + expiryHours * 3600 * 1000;
+    const tick = () => setRemainingMs(Math.max(0, deadlineRef.current - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [step, expiryHours]);
+  const hh = String(Math.floor(remainingMs / 3600000)).padStart(2, "0");
+  const mm = String(Math.floor((remainingMs % 3600000) / 60000)).padStart(2, "0");
+  const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
 
-  const submit = async () => {
+  // Move from generating -> instructions after 3s
+  useEffect(() => {
+    if (step !== "generating") return;
+    const id = window.setTimeout(() => setStep("instructions"), 3000);
+    return () => window.clearTimeout(id);
+  }, [step]);
+
+  const pickCrypto = (id: string) => {
+    setGatewayKind("crypto");
+    setSelectedCryptoId(id);
+    setSelectedBankId("");
+  };
+  const pickBank = (id: string) => {
+    setGatewayKind("bank");
+    setSelectedBankId(id);
+    setSelectedCryptoId("");
+  };
+
+  const goGenerate = () => {
     const base = Number(amount);
     if (!base || base <= 0) return toast.error("Enter a valid amount");
     if (base < minDeposit) return toast.error(`Minimum deposit is $${minDeposit}`);
-    if (!txHash.trim()) return toast.error("Enter the transaction hash after sending");
+    if (!gatewayKind) return toast.error("Select a payment gateway");
+    if (gatewayKind === "crypto" && !selectedCryptoId) return toast.error("Select a crypto network");
+    if (gatewayKind === "bank" && !selectedBankId) return toast.error("Select a bank");
+    setStep("generating");
+  };
+
+  const uploadReceipt = async (f: File) => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      const ext = f.name.split(".").pop() ?? "png";
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("deposit-receipts").upload(path, f, { upsert: true, contentType: f.type });
+      if (error) throw error;
+      setUploadedUrl(path);
+      setReceiptFile(f);
+      toast.success("Receipt uploaded");
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!uploadedUrl) return toast.error("Upload your payment receipt first");
+    if (gatewayKind === "crypto" && !txHash.trim()) return toast.error("Enter the on-chain transaction hash");
     setSubmitting(true);
 
     const expiresAt = new Date(Date.now() + expiryHours * 3600000).toISOString();
+    const methodKey = gatewayKind === "crypto" ? selectedCryptoId : `bank_${selectedBankId}`;
+    const currency = gatewayKind === "crypto"
+      ? `${selectedCrypto?.symbol} ${selectedCrypto?.network}`
+      : `${selectedBank?.method_name ?? "Bank"} (USD)`;
 
     const { error } = await supabase.from("deposits").insert({
       user_id: user!.id,
       amount: totalPayable,
-      crypto_currency: `${selected.symbol} ${selected.network}`,
-      tx_hash: txHash.trim(),
-      base_amount: base,
+      crypto_currency: currency,
+      tx_hash: gatewayKind === "crypto" ? txHash.trim() : null,
+      payment_method: gatewayKind === "crypto" ? "crypto" : "bank",
+      bank_method_id: gatewayKind === "bank" ? selectedBankId : null,
+      receipt_url: uploadedUrl,
+      base_amount: baseAmount,
       gas_fee_amount: gasFeeAmount,
       total_payable: totalPayable,
-      payment_method_key: paymentMethodKey,
+      payment_method_key: methodKey,
       expires_at: expiresAt,
     });
-    setSubmitting(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { setSubmitting(false); toast.error(error.message); return; }
 
     await supabase.from("transactions").insert({
       user_id: user!.id,
       type: "deposit_request",
       amount: totalPayable,
-      asset_name: `Deposit ${selected.symbol} ${selected.network} (base $${base.toFixed(2)} + gas $${gasFeeAmount.toFixed(2)})`,
+      asset_name: `Deposit ${currency} (base $${baseAmount.toFixed(2)} + fee $${gasFeeAmount.toFixed(2)})`,
       status: "pending",
       source_table: "deposits",
     });
+
+    setSubmitting(false);
     toast.success("Deposit submitted — awaiting admin approval");
-    setAmount(""); setTxHash("");
+    setStep("select");
+    setAmount(""); setTxHash(""); setReceiptFile(null); setUploadedUrl("");
+    setGatewayKind(null); setSelectedCryptoId(""); setSelectedBankId("");
     qc.invalidateQueries({ queryKey: ["my_deposits"] });
     qc.invalidateQueries({ queryKey: ["transactions"] });
     refetch();
@@ -155,120 +223,183 @@ function DepositPage() {
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Deposit funds</h1>
-        <p className="text-sm text-muted-foreground">Choose a network, send crypto to the address, then paste the transaction hash. Your balance is credited after admin confirmation.</p>
+        <p className="text-sm text-muted-foreground">Follow the guided wizard — pick a gateway, receive payment instructions, upload proof.</p>
       </div>
 
-      <Card className="p-6 space-y-5 bg-morph">
-        <div className="space-y-2">
-          <Label>Search asset / network</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search USDT, BTC, ETH…" className="pl-9" />
+      <Stepper step={step} />
+
+      {/* STEP 1: SELECT GATEWAY + AMOUNT */}
+      {step === "select" && (
+        <Card className="p-6 space-y-6 bg-morph">
+          <div className="space-y-2">
+            <Label>Amount (USD)</Label>
+            <Input type="number" min={minDeposit} step="0.01" placeholder={String(minDeposit)} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <p className="text-xs text-muted-foreground">Minimum deposit: ${minDeposit} · Processing fee: {gasFeePercent}%</p>
           </div>
-        </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <AnimatePresence mode="popLayout">
-            {filtered.map((c) => {
-              const active = c.id === selectedId;
-              return (
-                <motion.button
-                  layout key={c.id} type="button"
-                  initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
-                  whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => { setSelectedId(c.id); setPaymentMethodKey(c.id); }}
-                  className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
-                >
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}>
-                    {c.symbol === "BTC" ? <Bitcoin className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">{c.symbol} <span className="text-xs font-normal text-muted-foreground">· {c.network}</span></div>
-                    <div className="truncate text-xs text-muted-foreground">{c.label}</div>
-                  </div>
-                </motion.button>
-              );
-            })}
-            {!filtered.length && <div className="col-span-full text-sm text-muted-foreground">No assets match.</div>}
-          </AnimatePresence>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Amount (USD)</Label>
-          <Input type="number" min={minDeposit} step="0.01" placeholder={String(minDeposit)} value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <p className="text-xs text-muted-foreground">Minimum deposit: ${minDeposit}</p>
-        </div>
-
-        {/* Ledger breakdown */}
-        {baseAmount > 0 && (
-          <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border border-border bg-surface p-4 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <Receipt className="h-3.5 w-3.5" /> Payment Breakdown
+          {baseAmount > 0 && (
+            <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <Receipt className="h-3.5 w-3.5" /> Payment breakdown
+              </div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Base:</span><span className="font-semibold tabular-nums">${baseAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Processing fee ({gasFeePercent}%):</span><span className="font-semibold tabular-nums text-destructive">${gasFeeAmount.toFixed(2)}</span></div>
+              <div className="border-t border-border pt-2 flex justify-between text-sm"><span className="font-semibold">Total payable:</span><span className="font-bold tabular-nums text-primary">${totalPayable.toFixed(2)}</span></div>
             </div>
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Base amount:</span><span className="font-semibold tabular-nums">${baseAmount.toFixed(2)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Gas fee ({gasFeePercent}%):</span><span className="font-semibold tabular-nums text-destructive">${gasFeeAmount.toFixed(2)}</span></div>
-            <div className="border-t border-border pt-2 flex justify-between text-sm"><span className="font-semibold">Total payable:</span><span className="font-bold tabular-nums text-primary">${totalPayable.toFixed(2)}</span></div>
-            <div className="flex justify-between text-xs text-muted-foreground"><span>Payment method:</span><span className="font-mono">{paymentMethodKey}</span></div>
-            <div className="flex justify-between text-xs text-muted-foreground"><span>Expires in:</span><span>{expiryHours} hours</span></div>
-          </motion.div>
-        )}
+          )}
 
-        <div className="space-y-2">
-          <Label>Payment method</Label>
-          <Select value={paymentMethodKey} onValueChange={setPaymentMethodKey}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {paymentMethods?.map((m: any) => (
-                <SelectItem key={m.method_key} value={m.method_key}>{m.method_name} — {m.identifier}</SelectItem>
-              ))}
-              {CRYPTOS.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.symbol} ({c.network})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <motion.div layout className="rounded-xl border border-dashed border-border bg-surface p-4">
-          <p className="text-xs font-medium text-muted-foreground">Send {selected.symbol} ({selected.network}) to this address:</p>
-          <div className="mt-2 min-h-[44px]">
-            <AnimatePresence mode="wait">
-              {generating ? (
-                <motion.div key="gen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="flex items-center gap-3 rounded-md bg-background px-3 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <div className="flex-1">
-                    <div className="text-xs text-muted-foreground">Generating secure {selected.symbol} {selected.network} address…</div>
-                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border">
-                      <motion.div className="h-full bg-gradient-hero" initial={{ width: "5%" }} animate={{ width: "100%" }} transition={{ duration: 3.5 }} />
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div key="addr" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2">
-                  <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{wallet ?? "Address not set — contact support"}</code>
-                  <Button size="sm" variant="ghost" onClick={() => { if (wallet) { navigator.clipboard.writeText(wallet); toast.success("Copied"); } }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <div className="space-y-2">
+            <Label>Search asset / network</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search USDT, BTC, ETH, bank…" className="pl-9" />
+            </div>
           </div>
-          {revealed && <p className="mt-2 text-[10px] text-muted-foreground flex items-center gap-1"><Shield className="h-3 w-3" /> Address verified on-chain. Send only {selected.symbol} via {selected.network}.</p>}
-        </motion.div>
 
-        <div className="space-y-2">
-          <Label>Transaction hash</Label>
-          <Input placeholder="0x... or TRC20 tx id" value={txHash} onChange={(e) => setTxHash(e.target.value)} />
-          <p className="text-xs text-muted-foreground">Paste the on-chain tx id so the admin can verify your transfer.</p>
-        </div>
+          <div className="space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <WalletIcon className="h-3.5 w-3.5" /> Crypto gateways
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <AnimatePresence mode="popLayout">
+                {filteredCryptos.map((c) => {
+                  const active = c.id === selectedCryptoId && gatewayKind === "crypto";
+                  return (
+                    <motion.button
+                      layout key={c.id} type="button"
+                      initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+                      whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+                      onClick={() => pickCrypto(c.id)}
+                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
+                    >
+                      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}>
+                        {c.icon === "btc" ? <Bitcoin className="h-4 w-4" /> : <Coins className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">{c.symbol} <span className="text-xs font-normal text-muted-foreground">· {c.network}</span></div>
+                        <div className="truncate text-xs text-muted-foreground">{c.label}</div>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          </div>
 
-        <Button onClick={submit} disabled={submitting || generating} className="w-full">
-          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Submit deposit request
-        </Button>
-      </Card>
+          {!!bankMethods?.length && (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Landmark className="h-3.5 w-3.5" /> Interbank / wire gateways
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {bankMethods.map((b: any) => {
+                  const active = b.id === selectedBankId && gatewayKind === "bank";
+                  return (
+                    <button
+                      key={b.id} type="button" onClick={() => pickBank(b.id)}
+                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${active ? "border-primary bg-accent/50 shadow-glow" : "border-border bg-surface hover:bg-accent/30"}`}
+                    >
+                      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-gradient-hero text-primary-foreground" : "bg-surface-elevated"}`}>
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{b.method_name}</div>
+                        <div className="truncate text-xs text-muted-foreground">{b.method_type ?? "Bank transfer"}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
+          <Button onClick={goGenerate} className="w-full">
+            Continue <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </Card>
+      )}
+
+      {/* STEP 2: GENERATING */}
+      {step === "generating" && (
+        <Card className="p-10 bg-morph text-center space-y-4">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <h2 className="text-xl font-semibold">Generating secure payment gateway…</h2>
+          <p className="text-sm text-muted-foreground">Provisioning a one-time settlement address, verifying network liquidity and locking your rate.</p>
+          <div className="mx-auto max-w-md h-1.5 overflow-hidden rounded-full bg-border">
+            <motion.div className="h-full bg-gradient-hero" initial={{ width: "5%" }} animate={{ width: "100%" }} transition={{ duration: 3 }} />
+          </div>
+        </Card>
+      )}
+
+      {/* STEP 3: INSTRUCTIONS + PROOF UPLOAD */}
+      {step === "instructions" && (
+        <Card className="p-6 bg-morph space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="font-semibold">
+                Send exactly <span className="text-primary tabular-nums">${totalPayable.toFixed(2)}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive">
+              <Clock className="h-3.5 w-3.5" /> Expires in {hh}:{mm}:{ss}
+            </div>
+          </div>
+
+          {gatewayKind === "crypto" && selectedCrypto && (
+            <div className="space-y-3 rounded-xl border border-dashed border-border bg-surface p-4">
+              <p className="text-xs font-medium text-muted-foreground">Send {selectedCrypto.symbol} ({selectedCrypto.network}) to:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{wallet ?? "Address not set — contact support"}</code>
+                <Button size="sm" variant="ghost" onClick={() => { if (wallet) { navigator.clipboard.writeText(wallet); toast.success("Copied"); } }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <div>
+                <Label>Transaction hash</Label>
+                <Input placeholder="0x… or TRC20 tx id" value={txHash} onChange={(e) => setTxHash(e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          {gatewayKind === "bank" && selectedBank && (
+            <div className="space-y-2 rounded-xl border border-dashed border-border bg-surface p-4">
+              <p className="text-xs font-medium text-muted-foreground">Wire {selectedBank.method_name} instructions</p>
+              <InfoRow label="Account name" value={selectedBank.account_name} />
+              <InfoRow label="Account number" value={selectedBank.account_number} />
+              <InfoRow label="Routing / sort" value={selectedBank.routing_number} />
+              <InfoRow label="SWIFT / BIC" value={selectedBank.swift_code} />
+              <InfoRow label="Bank address" value={selectedBank.bank_address} />
+              {selectedBank.notes && <p className="pt-2 text-xs text-muted-foreground border-t border-border">{selectedBank.notes}</p>}
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-4">
+            <Label className="flex items-center gap-2 text-sm">
+              <Upload className="h-4 w-4 text-primary" /> Payment receipt <span className="text-destructive">*</span>
+            </Label>
+            <p className="text-xs text-muted-foreground">Upload a screenshot of your payment. Required before submission — admin will verify and credit your wallet.</p>
+            <Input type="file" accept="image/*,application/pdf" disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadReceipt(f); }} />
+            {uploading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</div>}
+            {receiptFile && !uploading && <div className="flex items-center gap-2 text-xs text-success"><CheckCircle2 className="h-3 w-3" /> {receiptFile.name}</div>}
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setStep("select")} className="flex-1"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+            <Button
+              onClick={submit}
+              disabled={submitting || uploading || !uploadedUrl || (gatewayKind === "crypto" && !txHash.trim())}
+              className="flex-1"
+            >
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Submit deposit request
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* HISTORY */}
       <Card className="p-6">
         <h2 className="mb-4 text-lg font-semibold">Your deposit history</h2>
         {!deposits?.length ? (
@@ -281,7 +412,7 @@ function DepositPage() {
                 <div>
                   <div className="font-semibold tabular-nums">${Number(d.amount).toFixed(2)} <span className="text-xs font-normal text-muted-foreground">· {d.crypto_currency}</span></div>
                   {d.base_amount && d.gas_fee_amount != null && (
-                    <div className="text-xs text-muted-foreground">Base: ${Number(d.base_amount).toFixed(2)} + Gas: ${Number(d.gas_fee_amount).toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">Base: ${Number(d.base_amount).toFixed(2)} + Fee: ${Number(d.gas_fee_amount).toFixed(2)}</div>
                   )}
                   {d.payment_method_key && <div className="text-xs text-muted-foreground">Method: {d.payment_method_key}</div>}
                   {d.expires_at && <div className="text-xs text-muted-foreground flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Expires: {new Date(d.expires_at).toLocaleString()}</div>}
@@ -298,6 +429,41 @@ function DepositPage() {
         Need help? <Link to="/support" className="text-primary underline">Contact support</Link>
       </p>
     </motion.div>
+  );
+}
+
+function Stepper({ step }: { step: Step }) {
+  const items: { id: Step; label: string }[] = [
+    { id: "select",       label: "Select gateway" },
+    { id: "generating",   label: "Generate" },
+    { id: "instructions", label: "Pay & upload" },
+  ];
+  const idx = items.findIndex((i) => i.id === step);
+  return (
+    <div className="flex items-center gap-2">
+      {items.map((it, i) => (
+        <div key={it.id} className="flex flex-1 items-center gap-2">
+          <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${i <= idx ? "bg-gradient-hero text-primary-foreground" : "bg-surface border border-border text-muted-foreground"}`}>{i + 1}</div>
+          <span className={`text-xs font-medium ${i <= idx ? "text-foreground" : "text-muted-foreground"}`}>{it.label}</span>
+          {i < items.length - 1 && <div className={`h-px flex-1 ${i < idx ? "bg-primary" : "bg-border"}`} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-2 max-w-[60%]">
+        <code className="break-all rounded bg-background px-2 py-1 text-xs font-mono">{value}</code>
+        <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(value); toast.success("Copied"); }}>
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
   );
 }
 

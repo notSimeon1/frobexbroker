@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/auth-context";
@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send } from "lucide-react";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -104,6 +104,8 @@ function AdminPage() {
           <TabsTrigger value="announcements" className="shrink-0"><Megaphone className="mr-1 h-3.5 w-3.5" />Announcements</TabsTrigger>
           <TabsTrigger value="signals" className="shrink-0"><Radio className="mr-1 h-3.5 w-3.5" />Signals</TabsTrigger>
           <TabsTrigger value="support" className="shrink-0"><Headphones className="mr-1 h-3.5 w-3.5" />Support</TabsTrigger>
+          <TabsTrigger value="roles" className="shrink-0"><UserCog className="mr-1 h-3.5 w-3.5" />Roles</TabsTrigger>
+          <TabsTrigger value="audit" className="shrink-0"><ScrollText className="mr-1 h-3.5 w-3.5" />Audit</TabsTrigger>
           <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
         </TabsList>
 
@@ -120,6 +122,8 @@ function AdminPage() {
         <TabsContent value="announcements"><AdminAnnouncementsTab /></TabsContent>
         <TabsContent value="signals"><AdminSignalsTab /></TabsContent>
         <TabsContent value="support"><AdminSupportTab /></TabsContent>
+        <TabsContent value="roles"><AdminRolesTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="audit"><AdminAuditTab users={overviewQuery.data?.users} /></TabsContent>
       </Tabs>
     </motion.div>
   );
@@ -867,3 +871,174 @@ function AdminSupportTab() {
   );
 }
 
+
+// ============ ADMIN ROLES TAB — promote / demote admins ============
+function AdminRolesTab({ users, loading, refetch }: { users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const [q, setQ] = useState("");
+  const rolesQuery = useQuery({
+    queryKey: ["admin_role_ids_full"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_roles").select("user_id,role,created_at").eq("role", "admin");
+      return data ?? [];
+    },
+    refetchInterval: 8000,
+  });
+  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.user_id as string));
+  const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return users ?? [];
+    return (users ?? []).filter((u: any) =>
+      (u.email ?? "").toLowerCase().includes(term) ||
+      (u.full_name ?? "").toLowerCase().includes(term) ||
+      (u.country ?? "").toLowerCase().includes(term)
+    );
+  }, [users, q]);
+
+  const admins = (users ?? []).filter((u: any) => adminSet.has(u.id));
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <KeyRound className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold flex items-center gap-2">Role management</h2>
+            <p className="text-sm text-muted-foreground">
+              Promote users to admin so they get the same panel access you have.
+              The Primary Super Admin (<span className="font-mono">{OWNER_EMAIL}</span>) cannot be demoted or modified by anyone else — enforced at the database level.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Crown className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Current admins ({admins.length})</h3>
+        </div>
+        {!admins.length ? (
+          <p className="text-sm text-muted-foreground">Only the primary super admin exists so far.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {admins.map((a: any) => (
+              <Badge key={a.id} variant="outline" className="border-primary/40 bg-primary/5 text-primary py-1.5 px-3">
+                {a.email?.toLowerCase() === OWNER_EMAIL && <Crown className="mr-1 h-3 w-3" />}
+                {a.full_name ?? a.email ?? a.id.slice(0, 8)}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">All users</h3>
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search email, name, country…" className="max-w-xs" />
+        </div>
+        <div className="divide-y divide-border">
+          {filtered.map((u: any) => {
+            const isOwner = u.email?.toLowerCase() === OWNER_EMAIL;
+            const isAdminUser = adminSet.has(u.id);
+            return (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 font-semibold">
+                    {isOwner && <Crown className="h-3.5 w-3.5 text-primary" />}
+                    {u.full_name ?? "—"}
+                    {isAdminUser && <Badge variant="outline" className="border-primary/40 text-primary text-[10px]"><ShieldCheck className="mr-0.5 h-2.5 w-2.5" />Admin</Badge>}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">{u.email ?? u.id} · {u.country ?? "—"}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs">
+                    <span>Admin access</span>
+                    <Switch
+                      checked={isAdminUser}
+                      disabled={isOwner}
+                      onCheckedChange={async (checked) => {
+                        try {
+                          const fn = checked ? "admin_grant_admin" : "admin_revoke_admin";
+                          const { error } = await supabase.rpc(fn as never, { _target: u.id } as never);
+                          if (error) throw error;
+                          toast.success(checked ? "Admin access granted" : "Admin access revoked");
+                          await reload();
+                        } catch (err: any) {
+                          toast.error(err.message ?? "Could not update role");
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+          {!filtered.length && <p className="py-6 text-center text-sm text-muted-foreground">No users match your search.</p>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ============ ADMIN AUDIT TAB — balance & role change history ============
+function AdminAuditTab({ users }: { users?: any[] }) {
+  const { data: logs, isLoading, refetch } = useQuery({
+    queryKey: ["admin_audit_logs"],
+    queryFn: async () => (await supabase.from("admin_balance_logs").select("*").order("created_at", { ascending: false }).limit(200)).data ?? [],
+    refetchInterval: 15000,
+  });
+  const userMap = useMemo(() => {
+    const m: Record<string, any> = {};
+    (users ?? []).forEach((u: any) => { m[u.id] = u; });
+    return m;
+  }, [users]);
+
+  return (
+    <Card className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><ScrollText className="h-4 w-4 text-primary" /> Audit log</h2>
+          <p className="text-xs text-muted-foreground">Every admin credit, debit and asset adjustment — with actor, target, amount and reason.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => refetch()}>Refresh</Button>
+      </div>
+      {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : !logs?.length ? (
+        <p className="text-sm text-muted-foreground">No admin actions recorded yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="pb-2">When</th>
+                <th className="pb-2">Admin</th>
+                <th className="pb-2">Target</th>
+                <th className="pb-2">Action</th>
+                <th className="pb-2">Asset</th>
+                <th className="pb-2 text-right">Amount</th>
+                <th className="pb-2">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((l: any) => (
+                <tr key={l.id} className="border-t border-border">
+                  <td className="py-2 text-xs">{new Date(l.created_at).toLocaleString()}</td>
+                  <td className="py-2 text-xs">{userMap[l.admin_id]?.email ?? l.admin_id.slice(0, 8)}</td>
+                  <td className="py-2 text-xs">{userMap[l.target_user_id]?.email ?? l.target_user_id.slice(0, 8)}</td>
+                  <td className="py-2"><Badge variant={l.action === "credit" ? "default" : "destructive"} className={l.action === "credit" ? "bg-success text-success-foreground text-[10px]" : "text-[10px]"}>{l.action}</Badge></td>
+                  <td className="py-2 text-xs">{l.asset_symbol ?? l.balance_type}</td>
+                  <td className="py-2 text-right tabular-nums text-xs">{Number(l.amount).toFixed(4)}{l.fiat_value_usd ? ` ($${Number(l.fiat_value_usd).toFixed(2)})` : ""}</td>
+                  <td className="py-2 text-xs text-muted-foreground max-w-[240px] truncate">{l.reason ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
