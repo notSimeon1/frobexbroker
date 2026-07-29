@@ -9,16 +9,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Bitcoin, Copy, Loader2, ShieldCheck, Timer, Upload, CheckCircle2 } from "lucide-react";
+import {
+  Bitcoin,
+  Copy,
+  Loader2,
+  ShieldCheck,
+  Timer,
+  Upload,
+  CheckCircle2,
+  Clock,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/buy-bitcoin")({
   component: BuyBitcoinPage,
-  head: () => ({ meta: [
-    { title: "Buy Bitcoin — Frobex" },
-    { name: "description", content: "Purchase Bitcoin instantly via bank transfer, Zelle, Cash App and more on Frobex." },
-    { property: "og:title", content: "Buy Bitcoin — Frobex" },
-    { property: "og:description", content: "Instant fiat-to-Bitcoin gateway with secure admin verification." },
-  ]}),
+  head: () => ({
+    meta: [
+      { title: "Buy Bitcoin — Frobex" },
+      { name: "description", content: "Purchase Bitcoin instantly via bank transfer, Zelle, Cash App and more on Frobex." },
+      { property: "og:title", content: "Buy Bitcoin — Frobex" },
+      { property: "og:description", content: "Instant fiat-to-Bitcoin gateway with secure admin verification." },
+    ],
+  }),
 });
 
 type PaymentMethod = {
@@ -29,13 +40,13 @@ type PaymentMethod = {
   recipient_name: string;
   identifier: string;
   is_active: boolean;
+  notes?: string | null;
 };
 
 const GAS_FEE_PCT = 0.03; // 3% network + processing
 
 function BuyBitcoinPage() {
   const { user } = useAuth();
-  const [phase, setPhase] = useState<"loading" | "form">("loading");
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [amount, setAmount] = useState("");
   const [selected, setSelected] = useState<PaymentMethod | null>(null);
@@ -43,23 +54,25 @@ function BuyBitcoinPage() {
   const [submitting, setSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(2 * 60 * 60); // 02:00:00
 
-  useEffect(() => {
-    const t = setTimeout(() => setPhase("form"), 3000);
-    return () => clearTimeout(t);
-  }, []);
+  // wizard step: select -> generating -> pay
+  const [step, setStep] = useState<"select" | "generating" | "pay">("select");
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("admin_payment_methods").select("*").eq("is_active", true).order("sort_order");
+      const { data } = await supabase
+        .from("admin_payment_methods")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order");
       setMethods((data as PaymentMethod[]) ?? []);
     })();
   }, []);
 
   useEffect(() => {
-    if (phase !== "form") return;
+    if (step !== "pay") return;
     const t = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
-  }, [phase]);
+  }, [step]);
 
   const countdown = useMemo(() => {
     const h = String(Math.floor(secondsLeft / 3600)).padStart(2, "0");
@@ -76,7 +89,24 @@ function BuyBitcoinPage() {
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Copied");
-    } catch { /* noop */ }
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+
+  const onPickMethod = (m: PaymentMethod) => {
+    setSelected(m);
+    // immediately transition to generating
+    setStep("generating");
+    setTimeout(() => {
+      setStep("pay");
+      // reset countdown when arriving in pay
+      setSecondsLeft(2 * 60 * 60);
+    }, 3000);
+  };
+
+  const handleFileChange = (f?: File | null) => {
+    setReceipt(f ?? null);
   };
 
   const submit = async () => {
@@ -116,7 +146,10 @@ function BuyBitcoinPage() {
       });
 
       toast.success("Purchase submitted — awaiting admin verification");
-      setAmount(""); setReceipt(null); setSelected(null);
+      setAmount("");
+      setReceipt(null);
+      setSelected(null);
+      setStep("select");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to submit");
     } finally {
@@ -124,107 +157,144 @@ function BuyBitcoinPage() {
     }
   };
 
-  if (phase === "loading") {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md text-center">
-          <div className="relative mx-auto mb-6 h-20 w-20">
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Bitcoin className="h-6 w-6 text-primary" /> Buy Bitcoin
+          </h1>
+          <p className="text-sm text-muted-foreground">Fund your account with fiat, receive BTC after verification</p>
+        </div>
+        <Badge variant="secondary" className="gap-1">
+          <Timer className="h-3.5 w-3.5" /> Transfer window: <span className="font-mono">{countdown}</span>
+        </Badge>
+      </div>
+
+      {/* Stepper header */}
+      <div className="flex items-center gap-3">
+        <StepItem label="Select gateway" active={step === "select"} done={step !== "select"} />
+        <div className="h-px flex-1 bg-border" />
+        <StepItem label="Generate" active={step === "generating"} done={step === "pay"} />
+        <div className="h-px flex-1 bg-border" />
+        <StepItem label="Pay & upload" active={step === "pay"} done={false} />
+      </div>
+
+      {/* STAGE 1: Select gateway */}
+      {step === "select" && (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Select payment method</h2>
+          <p className="text-sm text-muted-foreground mb-4">Select a payment method to view details and complete your purchase.</p>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {methods.length === 0 && (
+              <div className="text-sm text-muted-foreground">No active payment methods. Ask an admin to configure one.</div>
+            )}
+            {methods.map((m) => (
+              <button
+                key={m.id}
+                className={`w-full text-left rounded-lg border p-4 transition ${selected?.id === m.id ? "ring-2 ring-primary" : "hover:border-primary/50"}`}
+                onClick={() => onPickMethod(m)}
+              >
+                <div className="font-semibold">{m.method_name}</div>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* STAGE 2: Generating */}
+      {step === "generating" && (
+        <Card className="p-10 bg-morph text-center space-y-4">
+          <div className="relative mx-auto mb-2 h-20 w-20">
             <div className="absolute inset-0 rounded-full bg-primary/20 blur-2xl animate-pulse" />
             <div className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-hero">
               <Bitcoin className="h-10 w-10 text-primary-foreground" />
             </div>
           </div>
-          <h1 className="text-xl font-semibold">Generating secure payment gateway…</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Encrypting your session and preparing verified merchants</p>
-          <div className="mx-auto mt-6 h-1.5 w-64 overflow-hidden rounded-full bg-muted">
+          <h2 className="text-xl font-semibold">Generating secure payment gateway...</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Encrypting your session and preparing verified merchants.</p>
+          <div className="mx-auto mt-4 h-1.5 w-64 overflow-hidden rounded-full bg-muted">
             <motion.div initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }} className="h-full w-1/3 bg-gradient-hero" />
           </div>
-        </motion.div>
-      </div>
-    );
-  }
+        </Card>
+      )}
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Bitcoin className="h-6 w-6 text-primary" /> Buy Bitcoin</h1>
-          <p className="text-sm text-muted-foreground">Fund your account with fiat, receive BTC after verification</p>
-        </div>
-        <Badge variant="secondary" className="gap-1"><Timer className="h-3.5 w-3.5" /> Transfer window: <span className="font-mono">{countdown}</span></Badge>
-      </div>
-
-      <Card className="space-y-4 p-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Amount (USD)</Label>
-            <Input type="number" min={50} step="1" placeholder="500" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Minimum $50 · Network + processing fee 3%</p>
-          </div>
-          <div className="space-y-2">
-            <Label>You will pay</Label>
-            <div className="rounded-lg border border-border bg-surface px-3 py-2">
-              <div className="text-lg font-bold">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-              <div className="text-xs text-muted-foreground">Base ${base.toFixed(2)} + Gas ${gas.toFixed(2)}</div>
+      {/* STAGE 3: Payment details & upload */}
+      {step === "pay" && selected && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-gold-400 font-extrabold text-lg">Send exactly ${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              </div>
+              <div className="rounded-full border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive">
+                Expires in {countdown}
+              </div>
             </div>
-          </div>
-        </div>
-      </Card>
 
-      <div>
-        <h2 className="mb-3 text-lg font-semibold">Select payment method</h2>
-        {methods.length === 0 ? (
-          <Card className="p-6 text-sm text-muted-foreground">No active payment methods. Ask an admin to configure one.</Card>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {methods.map((m) => (
-              <Card key={m.id} className={`cursor-pointer p-4 transition ${selected?.id === m.id ? "ring-2 ring-primary" : "hover:border-primary/50"}`} onClick={() => setSelected(m)}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-semibold">{m.method_name}</div>
-                    <div className="text-xs text-muted-foreground">{m.identifier_label}: <span className="font-mono">{m.identifier}</span></div>
-                    <div className="text-xs text-muted-foreground">Recipient: {m.recipient_name}</div>
-                  </div>
-                  {selected?.id === m.id ? <CheckCircle2 className="h-5 w-5 text-primary" /> : null}
-                </div>
-                <Button variant="outline" size="sm" className="mt-3" onClick={(e) => { e.stopPropagation(); copy(m.identifier); }}>
-                  <Copy className="mr-1 h-3.5 w-3.5" /> Copy
-                </Button>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+            <div className="mt-4 space-y-3">
+              <InfoRow label="Account Name" value={selected.recipient_name} onCopy={() => copy(selected.recipient_name)} />
+              <InfoRow label={selected.identifier_label || "Account Identifier"} value={selected.identifier} onCopy={() => copy(selected.identifier)} />
+              {selected.notes && <div className="text-sm text-muted-foreground">{selected.notes}</div>}
+            </div>
 
-      <AnimatePresence>
-        {selected && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <Card className="space-y-4 p-6">
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
-                <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4 text-primary" /> Payment instructions</div>
-                <p className="mt-1 text-muted-foreground">
-                  Send exactly <span className="font-semibold text-foreground">${total.toFixed(2)}</span> to
-                  <span className="font-semibold text-foreground"> {selected.recipient_name}</span> via
-                  <span className="font-semibold text-foreground"> {selected.method_name}</span> ({selected.identifier})
-                  within <span className="font-mono">{countdown}</span>. Upload a screenshot of the receipt below.
-                </p>
-              </div>
+            <div className="mt-3 text-xs text-muted-foreground">Note: Use the exact amount and include the identifier/memo as provided. Payments that do not match may be delayed.</div>
+          </Card>
 
-              <div className="space-y-2">
-                <Label>Upload payment receipt</Label>
-                <Input type="file" accept="image/*,application/pdf" onChange={(e) => setReceipt(e.target.files?.[0] ?? null)} />
-                {receipt && <p className="text-xs text-muted-foreground">{receipt.name}</p>}
-              </div>
+          <Card className="p-6">
+            <h3 className="text-sm font-semibold">Payment receipt *</h3>
+            <p className="text-xs text-muted-foreground">Upload a screenshot of your payment. Required before submission — admin will verify and credit your wallet.</p>
 
-              <Button className="w-full" size="lg" disabled={submitting} onClick={submit}>
-                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Submit for verification
+            <div className="mt-3">
+              <input id="fileInputBuyBitcoin" type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} className="hidden" />
+              <label htmlFor="fileInputBuyBitcoin" className="flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer">
+                <span className="bg-gradient-hero text-primary-foreground rounded-md px-3 py-1 font-bold">Choose File</span>
+                <span className="text-sm text-muted-foreground">{receipt ? receipt.name : "No file chosen"}</span>
+              </label>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" onClick={() => { setStep("select"); setSelected(null); setReceipt(null); }} className="flex-1">Back</Button>
+              <Button onClick={submit} disabled={submitting || !receipt} className="flex-1">
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Submit deposit request
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Admin will review your receipt and credit BTC to your wallet.</p>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Small helper when no selection */}
+      {step !== "pay" && (
+        <div className="text-center text-sm text-muted-foreground">Select a payment method to view details and complete your purchase.</div>
+      )}
+    </div>
+  );
+}
+
+function StepItem({ label, active, done }: { label: string; active?: boolean; done?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${active ? "bg-gradient-hero text-primary-foreground" : done ? "bg-primary text-primary-foreground" : "bg-surface border border-border text-muted-foreground"}`}>
+        {done ? "✓" : ""}
+      </div>
+      <div className={`text-sm font-medium ${active || done ? "text-foreground" : "text-muted-foreground"}`}>{label}</div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, onCopy }: { label: string; value?: string | null; onCopy?: () => void }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-center gap-3">
+      <div className="text-sm text-muted-foreground w-40">{label}</div>
+      <div className="flex items-center gap-2 flex-1">
+        <code className="break-all rounded-md bg-background px-3 py-2 text-xs font-mono">{value}</code>
+        <Button size="sm" variant="ghost" onClick={onCopy}>
+          <Copy className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
