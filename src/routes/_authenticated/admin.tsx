@@ -93,6 +93,7 @@ function AdminPage() {
       <Tabs defaultValue="deposits">
         <TabsList className="flex flex-wrap h-auto gap-1.5 p-1.5 bg-muted/50 w-full justify-start">
           <TabsTrigger value="deposits" className="shrink-0">Deposits</TabsTrigger>
+          <TabsTrigger value="proofs" className="shrink-0"><FileText className="mr-1 h-3.5 w-3.5" />Deposit Proofs</TabsTrigger>
           <TabsTrigger value="withdrawals" className="shrink-0">Withdrawals</TabsTrigger>
           <TabsTrigger value="users" className="shrink-0">Users &amp; Charts</TabsTrigger>
           <TabsTrigger value="kyc" className="shrink-0">KYC Review</TabsTrigger>
@@ -110,6 +111,7 @@ function AdminPage() {
         </TabsList>
 
         <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="proofs"><DepositProofsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="withdrawals"><WithdrawalsTab items={overviewQuery.data?.withdrawals} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="users"><UsersTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="kyc"><KycTab items={overviewQuery.data?.kyc} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
@@ -142,6 +144,91 @@ function DepositsTab({ items, users, loading, refetch }: { items?: any[]; users?
   };
 
   return <RequestList items={items} users={users} loading={loading} kind="Deposit" onDecide={decide} />;
+}
+
+function DepositProofsTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
+  const decideDeposit = useServerFn(decideAdminDeposit);
+  const [creditCrypto, setCreditCrypto] = useState<Record<string, string>>({});
+  const [creditQty, setCreditQty] = useState<Record<string, string>>({});
+
+  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  const withProof = (items ?? []).filter((d: any) => d.proof_url || d.tx_hash);
+  if (!withProof.length) return <Card className="p-6 text-sm text-muted-foreground">No deposit proofs uploaded yet.</Card>;
+
+  const creditCryptoAsset = async (d: any) => {
+    const sym = creditCrypto[d.id] ?? d.crypto_currency ?? "USDT";
+    const qty = Number(creditQty[d.id] ?? 0);
+    if (!qty || qty <= 0) return toast.error("Enter crypto quantity to credit");
+    try {
+      const { error } = await supabase.from("user_holdings").upsert(
+        { user_id: d.user_id, symbol: sym, quantity: qty, network: d.crypto_currency ?? "spot" },
+        { onConflict: "user_id,symbol" },
+      );
+      if (error) throw error;
+      await supabase.from("transactions").insert({ user_id: d.user_id, type: "deposit_credit", amount: Number(d.amount), asset_name: `${qty} ${sym}`, status: "completed" });
+      await decideDeposit({ data: { id: d.id, status: "approved" } });
+      toast.success(`Credited ${qty} ${sym} to user wallet`);
+      setCreditQty((p) => ({ ...p, [d.id]: "" }));
+      await refetch();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not credit crypto");
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><FileText className="h-4 w-4 text-primary" /> Deposit Proof Review</h2>
+      <div className="space-y-3">
+        {withProof.map((d: any) => {
+          const requestUser = users?.find((u) => u.id === d.user_id);
+          return (
+            <div key={d.id} className="rounded-lg border border-border bg-surface p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold tabular-nums">${Number(d.amount).toFixed(2)} · {d.crypto_currency}</div>
+                  <div className="text-xs text-muted-foreground">{requestUser?.email ?? requestUser?.full_name ?? d.user_id}</div>
+                  {d.tx_hash && <div className="text-xs text-muted-foreground break-all">tx: {d.tx_hash}</div>}
+                  <div className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleString()}</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {d.proof_url && <Button size="sm" variant="outline" onClick={() => window.open(d.proof_url, "_blank", "noopener,noreferrer")}><FileText className="mr-1 h-4 w-4" /> View proof</Button>}
+                  {d.status === "pending" && (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => decideDeposit({ data: { id: d.id, status: "rejected" } }).then(() => refetch())}><X className="h-4 w-4" /></Button>
+                      <Button size="sm" onClick={() => decideDeposit({ data: { id: d.id, status: "approved" } }).then(() => refetch())}><Check className="mr-1 h-4 w-4" /> Approve</Button>
+                    </>
+                  )}
+                  {d.status !== "pending" && <Badge variant={d.status === "approved" ? "default" : "destructive"} className={d.status === "approved" ? "bg-success text-success-foreground" : ""}>{d.status}</Badge>}
+                </div>
+              </div>
+              {d.status === "pending" && (
+                <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Credit crypto</Label>
+                    <Select value={creditCrypto[d.id] ?? d.crypto_currency ?? "USDT"} onValueChange={(v) => setCreditCrypto((p) => ({ ...p, [d.id]: v }))}>
+                      <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BTC">BTC</SelectItem>
+                        <SelectItem value="ETH">ETH</SelectItem>
+                        <SelectItem value="USDT">USDT</SelectItem>
+                        <SelectItem value="BNB">BNB</SelectItem>
+                        <SelectItem value="SOL">SOL</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1 min-w-[120px] space-y-1">
+                    <Label className="text-xs">Quantity</Label>
+                    <Input type="number" step="0.000001" placeholder="0.00" value={creditQty[d.id] ?? ""} onChange={(e) => setCreditQty((p) => ({ ...p, [d.id]: e.target.value }))} />
+                  </div>
+                  <Button size="sm" className="bg-success hover:bg-success/90 text-success-foreground" onClick={() => creditCryptoAsset(d)}>Credit to wallet</Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
 function WithdrawalsTab({ items, users, loading, refetch }: { items?: any[]; users?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {

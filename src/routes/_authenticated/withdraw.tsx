@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, XCircle, Loader2 } from "lucide-react";
+import { CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -19,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/withdraw")({
 
 function WithdrawPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("USDT");
   const [wallet, setWallet] = useState("");
@@ -62,15 +63,16 @@ function WithdrawPage() {
       asset_name: `Pending withdrawal ${currency}`,
       status: "pending",
     });
-    toast.success("Withdrawal requested — awaiting admin approval");
+    toast.success("Withdrawal request submitted");
     setAmount(""); setWallet(""); refetch();
+    navigate({ to: "/support" });
   };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Withdraw funds</h1>
-        <p className="text-sm text-muted-foreground">Request a payout to your crypto wallet. Funds are sent after admin review.</p>
+        <p className="text-sm text-muted-foreground">Request a payout to your crypto wallet. Funds are sent after processing.</p>
       </div>
 
       <Card className="p-6 space-y-5">

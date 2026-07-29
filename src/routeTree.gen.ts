@@ -20,6 +20,7 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedAdminOpsRouteImport } from './routes/_authenticated/admin-ops'
 import { Route as AuthenticatedAiBotsRouteImport } from './routes/_authenticated/ai-bots'
 import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
+import { Route as AuthenticatedAssetsRouteImport } from './routes/_authenticated/assets'
 import { Route as AuthenticatedBuyBitcoinRouteImport } from './routes/_authenticated/buy-bitcoin'
 import { Route as AuthenticatedCopyTradingRouteImport } from './routes/_authenticated/copy-trading'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -92,6 +93,11 @@ const AuthenticatedAnnouncementsRoute =
     path: '/announcements',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedAssetsRoute = AuthenticatedAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedBuyBitcoinRoute = AuthenticatedBuyBitcoinRouteImport.update({
   id: '/buy-bitcoin',
   path: '/buy-bitcoin',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/admin-ops': typeof AuthenticatedAdminOpsRoute
   '/ai-bots': typeof AuthenticatedAiBotsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/assets': typeof AuthenticatedAssetsRoute
   '/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
   '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/admin-ops': typeof AuthenticatedAdminOpsRoute
   '/ai-bots': typeof AuthenticatedAiBotsRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/assets': typeof AuthenticatedAssetsRoute
   '/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
   '/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -231,6 +239,7 @@ export interface FileRoutesById {
   '/_authenticated/admin-ops': typeof AuthenticatedAdminOpsRoute
   '/_authenticated/ai-bots': typeof AuthenticatedAiBotsRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
+  '/_authenticated/assets': typeof AuthenticatedAssetsRoute
   '/_authenticated/buy-bitcoin': typeof AuthenticatedBuyBitcoinRoute
   '/_authenticated/copy-trading': typeof AuthenticatedCopyTradingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -259,6 +268,7 @@ export interface FileRouteTypes {
     | '/admin-ops'
     | '/ai-bots'
     | '/announcements'
+    | '/assets'
     | '/buy-bitcoin'
     | '/copy-trading'
     | '/dashboard'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/admin-ops'
     | '/ai-bots'
     | '/announcements'
+    | '/assets'
     | '/buy-bitcoin'
     | '/copy-trading'
     | '/dashboard'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin-ops'
     | '/_authenticated/ai-bots'
     | '/_authenticated/announcements'
+    | '/_authenticated/assets'
     | '/_authenticated/buy-bitcoin'
     | '/_authenticated/copy-trading'
     | '/_authenticated/dashboard'
@@ -417,6 +429,13 @@ declare module '@tanstack/react-router' {
       path: '/announcements'
       fullPath: '/announcements'
       preLoaderRoute: typeof AuthenticatedAnnouncementsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/assets': {
+      id: '/_authenticated/assets'
+      path: '/assets'
+      fullPath: '/assets'
+      preLoaderRoute: typeof AuthenticatedAssetsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/buy-bitcoin': {
@@ -525,6 +544,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminOpsRoute: typeof AuthenticatedAdminOpsRoute
   AuthenticatedAiBotsRoute: typeof AuthenticatedAiBotsRoute
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
+  AuthenticatedAssetsRoute: typeof AuthenticatedAssetsRoute
   AuthenticatedBuyBitcoinRoute: typeof AuthenticatedBuyBitcoinRoute
   AuthenticatedCopyTradingRoute: typeof AuthenticatedCopyTradingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
@@ -544,6 +564,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminOpsRoute: AuthenticatedAdminOpsRoute,
   AuthenticatedAiBotsRoute: AuthenticatedAiBotsRoute,
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
+  AuthenticatedAssetsRoute: AuthenticatedAssetsRoute,
   AuthenticatedBuyBitcoinRoute: AuthenticatedBuyBitcoinRoute,
   AuthenticatedCopyTradingRoute: AuthenticatedCopyTradingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,

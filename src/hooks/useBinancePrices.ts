@@ -55,24 +55,45 @@ export function useBinancePrices(symbols: string[] = DEFAULT_SYMBOLS) {
       };
     };
 
-    // CoinGecko REST fallback for immediate values (before WS ticks arrive)
+    // Bybit REST fallback for immediate values (before WS ticks arrive)
     (async () => {
-      const map: Record<string, string> = { BTCUSDT: "bitcoin", ETHUSDT: "ethereum", BNBUSDT: "binancecoin", SOLUSDT: "solana", XRPUSDT: "ripple", ADAUSDT: "cardano", MNTUSDT: "mantle", DOGEUSDT: "dogecoin" };
-      const ids = symbols.map((s) => map[s]).filter(Boolean).join(",");
-      if (!ids) return;
       try {
-        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`);
-        if (!res.ok) return;
+        const res = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot`);
+        if (!res.ok) throw new Error("bybit failed");
         const j = await res.json();
+        const list = j?.result?.list ?? [];
+        const bybitMap: Record<string, { price: number; change: number }> = {};
+        for (const item of list) {
+          bybitMap[item.symbol] = { price: Number(item.lastPrice), change: Number(item.price24hPcnt) * 100 };
+        }
         setTickers((t) => {
           const next = { ...t };
           for (const s of symbols) {
-            const id = map[s]; if (!id || !j[id]) continue;
-            if (!next[s]) next[s] = { symbol: s, price: j[id].usd, change: j[id].usd_24h_change ?? 0, high: 0, low: 0, volume: 0, direction: "flat" };
+            if (next[s]) continue;
+            const b = bybitMap[s];
+            if (b) next[s] = { symbol: s, price: b.price, change: b.change, high: 0, low: 0, volume: 0, direction: "flat" };
           }
           return next;
         });
-      } catch { /* ignore */ }
+      } catch {
+        // CoinGecko secondary fallback
+        const map: Record<string, string> = { BTCUSDT: "bitcoin", ETHUSDT: "ethereum", BNBUSDT: "binancecoin", SOLUSDT: "solana", XRPUSDT: "ripple", ADAUSDT: "cardano", MNTUSDT: "mantle", DOGEUSDT: "dogecoin" };
+        const ids = symbols.map((s) => map[s]).filter(Boolean).join(",");
+        if (!ids) return;
+        try {
+          const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`);
+          if (!res.ok) return;
+          const j = await res.json();
+          setTickers((t) => {
+            const next = { ...t };
+            for (const s of symbols) {
+              const id = map[s]; if (!id || !j[id]) continue;
+              if (!next[s]) next[s] = { symbol: s, price: j[id].usd, change: j[id].usd_24h_change ?? 0, high: 0, low: 0, volume: 0, direction: "flat" };
+            }
+            return next;
+          });
+        } catch { /* ignore */ }
+      }
     })();
 
     connect();

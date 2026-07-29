@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
-import { Loader2, TrendingUp, ShieldCheck, Zap, Globe, Lock, Award, Users, BarChart3, Wallet, Bot, Headphones, Star, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader as Loader2, TrendingUp, ShieldCheck, Zap, Globe, Lock, Award, Users, ChartBar as BarChart3, Wallet, Bot, Headphones, Star, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/auth")({
@@ -44,6 +44,7 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [country, setCountry] = useState("Australia");
+  const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
 
   const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
@@ -69,7 +70,7 @@ function AuthPage() {
           email, password,
           options: {
             emailRedirectTo: `${window.location.origin}${returnTo}`,
-            data: { full_name: fullName, country },
+            data: { full_name: fullName, country, referral_code: referralCode || undefined },
           },
         });
         if (error) throw error;
@@ -142,6 +143,10 @@ function AuthPage() {
                     <div>
                       <Label htmlFor="country">Country</Label>
                       <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Australia" required={tab === "signup"} maxLength={80} />
+                    </div>
+                    <div>
+                      <Label htmlFor="referral">Referral code (optional)</Label>
+                      <Input id="referral" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} placeholder="Enter referrer's code" maxLength={40} />
                     </div>
                   </TabsContent>
                   <div>

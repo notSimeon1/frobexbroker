@@ -3,11 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, LineChart, Store,
-  ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles,
-  Headphones, Megaphone, Mail, User, ChevronDown, HelpCircle, Gift, Play, ShoppingCart, MinusSquare, Zap, Cpu, Layers, Bitcoin,
-} from "lucide-react";
+import { TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, ChartLine as LineChart, Store, ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles, Headphones, Megaphone, Mail, User, ChevronDown, Circle as HelpCircle, Gift, Play, ShoppingCart, SquareMinus as MinusSquare, Zap, Cpu, Layers, Bitcoin, Wallet } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "./NotificationBell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
@@ -39,6 +35,7 @@ export function Navbar() {
     ]},
     { title: "MANAGE ASSETS", items: [
       { to: "/buy-bitcoin", label: "Buy Bitcoin", icon: <Bitcoin className="h-4 w-4" />, badge: { label: "Instant", tone: "gold" } },
+      { to: "/assets", label: "Assets", icon: <Wallet className="h-4 w-4" /> },
       { to: "/market", label: "Buy / Sell", icon: <ShoppingCart className="h-4 w-4" /> },
       { to: "/deposit", label: "Deposit", icon: <ArrowDownToLine className="h-4 w-4" /> },
       { to: "/withdraw", label: "Withdraw", icon: <ArrowUpFromLine className="h-4 w-4" /> },

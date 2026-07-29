@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Bot, Loader as Loader2, TrendingUp, Clock, CircleCheck as CheckCircle2, Zap, Cpu, Sparkles, ArrowRight } from "lucide-react";
+import { Bot, Loader as Loader2, TrendingUp, Clock, CircleCheck as CheckCircle2, Zap, Cpu, Sparkles, ArrowRight, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -71,7 +71,7 @@ function AiBotsPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">AI Trading Bots</h1>
             <p className="text-sm text-muted-foreground">
-              Automated algorithmic trading with daily profit accrual. Choose a tier, invest, and let the bot trade for you.
+              Automated algorithmic trading with hourly profit accrual. Choose a tier, invest, and let the bot trade for you.
             </p>
           </div>
         </div>
@@ -147,7 +147,12 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
   const gradient = TIER_COLORS[bot.tier_key] ?? "from-primary to-primary/80";
   const minRoi = Number(bot.min_roi);
   const maxRoi = Number(bot.max_roi);
-  const dailyEstimate = (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100;
+  const hourlyEstimate = bot.tier_key === "bronze"
+    ? 10
+    : bot.tier_key === "alpha" || (bot.name ?? "").toLowerCase().includes("alpha core")
+      ? 11
+      : (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100 / 24;
+  const hourlyRoi = (hourlyEstimate / Number(bot.capital_required)) * 100;
 
   const activate = async () => {
     const usd = Number(amount);
@@ -162,7 +167,7 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
         _invested_amount: usd,
       } as never);
       if (error) throw error;
-      toast.success(`${bot.name} activated! Daily profits will accrue automatically.`);
+      toast.success(`${bot.name} activated! Hourly profits will accrue automatically.`);
       qc.invalidateQueries({ queryKey: ["my_active_bots"] });
       qc.invalidateQueries({ queryKey: ["profile"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
@@ -212,12 +217,12 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
             <div className="flex items-center gap-2 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span className="text-muted-foreground">Est. daily profit:</span>
-              <span className="font-bold text-success tabular-nums">~${dailyEstimate.toFixed(2)}/day</span>
+              <span className="text-muted-foreground">Est. hourly profit:</span>
+              <span className="font-bold text-success tabular-nums">~${hourlyEstimate.toFixed(2)}/hour</span>
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Duration: {bot.duration_days} days</span>
+              <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Hourly ROI: ~{hourlyRoi.toFixed(2)}%/hr · Duration: {bot.duration_days} days</span>
             </div>
           </div>
 
@@ -243,7 +248,7 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
               <div className="space-y-4">
                 <div className="rounded-lg bg-surface p-3 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Available balance:</span><span className="font-bold tabular-nums">${balance.toFixed(2)}</span></div>
-                  <div className="flex justify-between mt-1"><span className="text-muted-foreground">Daily ROI:</span><span className="font-bold text-success">{minRoi.toFixed(1)}-{maxRoi.toFixed(1)}%</span></div>
+                  <div className="flex justify-between mt-1"><span className="text-muted-foreground">Hourly ROI:</span><span className="font-bold text-success">~{((Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100 / 24).toFixed(2)}%/hr</span></div>
                   <div className="flex justify-between mt-1"><span className="text-muted-foreground">Duration:</span><span className="font-bold">{bot.duration_days} days</span></div>
                 </div>
                 <div>
