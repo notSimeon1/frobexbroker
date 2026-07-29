@@ -45,7 +45,7 @@ function ReferralsPage() {
         </div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Earn 20% per referral</h1>
-          <p className="text-sm text-muted-foreground">Share your link. You earn 20% of every deposit your referrals make — paid instantly on admin approval.</p>
+          <p className="text-sm text-muted-foreground">Invite others and earn 20% of their profits before withdrawal.</p>
         </div>
       </div>
 
