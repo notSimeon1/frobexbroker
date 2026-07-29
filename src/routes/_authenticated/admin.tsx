@@ -122,6 +122,8 @@ function AdminPage() {
         <TabsContent value="announcements"><AdminAnnouncementsTab /></TabsContent>
         <TabsContent value="signals"><AdminSignalsTab /></TabsContent>
         <TabsContent value="support"><AdminSupportTab /></TabsContent>
+        <TabsContent value="roles"><AdminRolesTab users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="audit"><AdminAuditTab users={overviewQuery.data?.users} /></TabsContent>
       </Tabs>
     </motion.div>
   );
