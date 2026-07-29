@@ -107,9 +107,18 @@ async function updateProfileBalance(userId: string, profile: BalanceColumns, del
 
 export async function assertOwner(userId: string) {
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
-  if (error || data.user?.email?.toLowerCase() !== OWNER_EMAIL) {
-    throw new Error("Admin access is restricted to the owner account");
-  }
+  if (!error && data.user?.email?.toLowerCase() === OWNER_EMAIL) return;
+
+  // Also allow users granted admin role via user_roles table
+  const { data: roleRow } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (roleRow) return;
+
+  throw new Error("Admin access is restricted to authorized admin accounts");
 }
 
 export async function adminGetOverview(userId: string) {
@@ -243,7 +252,7 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
   return { ok: true };
 }
 
-export async function adminUpdateChart(userId: string, targetUserId: string, mode: "profit" | "loss" | "flat", intensity: number) {
+export async function adminUpdateChart(userId: string, targetUserId: string, mode: "profit" | "loss" | "flat" | "live", intensity: number) {
   await assertOwner(userId);
   const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() }).eq("id", targetUserId);
   if (error) throw new Error(error.message);

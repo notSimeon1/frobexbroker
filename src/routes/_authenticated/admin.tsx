@@ -50,9 +50,22 @@ function AdminPage() {
       setIsAdmin(true);
       return;
     }
-    setIsAdmin(false);
-    toast.error("Admin only");
-    navigate({ to: "/dashboard" });
+    // Check user_roles table for admin role
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+          toast.error("Admin only");
+          navigate({ to: "/dashboard" });
+        }
+      });
   }, [user, navigate]);
 
   const overviewQuery = useQuery({
@@ -152,7 +165,7 @@ function DepositProofsTab({ items, users, loading, refetch }: { items?: any[]; u
   const [creditQty, setCreditQty] = useState<Record<string, string>>({});
 
   if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
-  const withProof = (items ?? []).filter((d: any) => d.proof_url || d.tx_hash);
+  const withProof = (items ?? []).filter((d: any) => d.receipt_url || d.proof_url || d.tx_hash);
   if (!withProof.length) return <Card className="p-6 text-sm text-muted-foreground">No deposit proofs uploaded yet.</Card>;
 
   const creditCryptoAsset = async (d: any) => {
@@ -160,7 +173,7 @@ function DepositProofsTab({ items, users, loading, refetch }: { items?: any[]; u
     const qty = Number(creditQty[d.id] ?? 0);
     if (!qty || qty <= 0) return toast.error("Enter crypto quantity to credit");
     try {
-      const { error } = await supabase.from("user_holdings").upsert(
+      const { error } = await (supabase as any).from("user_holdings").upsert(
         { user_id: d.user_id, symbol: sym, quantity: qty, network: d.crypto_currency ?? "spot" },
         { onConflict: "user_id,symbol" },
       );
@@ -191,7 +204,31 @@ function DepositProofsTab({ items, users, loading, refetch }: { items?: any[]; u
                   <div className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleString()}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {d.proof_url && <Button size="sm" variant="outline" onClick={() => window.open(d.proof_url, "_blank", "noopener,noreferrer")}><FileText className="mr-1 h-4 w-4" /> View proof</Button>}
+                  {(d.receipt_url || d.proof_url) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        const storagePath = d.receipt_url || d.proof_url;
+                        // If it's already a full URL, open directly
+                        if (storagePath.startsWith("http")) {
+                          window.open(storagePath, "_blank", "noopener,noreferrer");
+                          return;
+                        }
+                        // Otherwise generate a signed URL from storage
+                        const { data, error } = await supabase.storage
+                          .from("deposit-receipts")
+                          .createSignedUrl(storagePath, 3600);
+                        if (error || !data?.signedUrl) {
+                          toast.error("Could not generate proof URL");
+                          return;
+                        }
+                        window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+                      }}
+                    >
+                      <FileText className="mr-1 h-4 w-4" /> View proof
+                    </Button>
+                  )}
                   {d.status === "pending" && (
                     <>
                       <Button size="sm" variant="outline" onClick={() => decideDeposit({ data: { id: d.id, status: "rejected" } }).then(() => refetch())}><X className="h-4 w-4" /></Button>
@@ -307,13 +344,13 @@ function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boo
   const toggleMode = useServerFn(toggleAdminAccountMode);
   const toggleSuspend = useServerFn(toggleAdminSuspend);
   const toggleAiTrading = useServerFn(toggleAdminAiTrading);
-  const [mode, setMode] = useState<string>(user.chart_mode ?? "flat");
+  const [mode, setMode] = useState<string>(user.chart_mode ?? "live");
   const [intensity, setIntensity] = useState<string>(String(user.chart_intensity ?? 1));
   const [creditAmt, setCreditAmt] = useState("");
 
   const saveChart = async () => {
     try {
-      await saveUserChart({ data: { userId: user.id, mode: mode as "profit" | "loss" | "flat", intensity: Number(intensity) || 1 } });
+      await saveUserChart({ data: { userId: user.id, mode: mode as "profit" | "loss" | "flat" | "live", intensity: Number(intensity) || 1 } });
       toast.success("Chart updated");
       await onChange();
     } catch (err: any) {
@@ -411,6 +448,7 @@ function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boo
           <Select value={mode} onValueChange={setMode}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="live"><Activity className="inline mr-1 h-3 w-3" /> Sync with live price</SelectItem>
               <SelectItem value="profit"><TrendingUp className="inline mr-1 h-3 w-3" /> Profit (up)</SelectItem>
               <SelectItem value="loss"><TrendingDown className="inline mr-1 h-3 w-3" /> Loss (down)</SelectItem>
               <SelectItem value="flat"><Minus className="inline mr-1 h-3 w-3" /> Flat</SelectItem>

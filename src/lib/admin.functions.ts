@@ -20,7 +20,7 @@ import {
 } from "./admin.server";
 
 const decisionSchema = z.object({ id: z.string().uuid(), status: z.enum(["approved", "rejected"]) });
-const chartSchema = z.object({ userId: z.string().uuid(), mode: z.enum(["profit", "loss", "flat"]), intensity: z.number().min(0.1).max(5) });
+const chartSchema = z.object({ userId: z.string().uuid(), mode: z.enum(["profit", "loss", "flat", "live"]), intensity: z.number().min(0.1).max(5) });
 const balanceSchema = z.object({ userId: z.string().uuid(), amount: z.number().positive().max(1_000_000), direction: z.enum(["credit", "debit"]) });
 const complaintSchema = z.object({ id: z.string().uuid(), status: z.enum(["pending", "resolved"]) });
 const settingSchema = z.object({ key: z.string().min(1).max(80), value: z.string().min(1).max(300) });

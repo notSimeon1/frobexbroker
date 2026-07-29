@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_authenticated/trade")({
   component: Dashboard,
 });
 
-type ChartMode = "profit" | "loss" | "flat";
+type ChartMode = "profit" | "loss" | "flat" | "live";
 
 const ASSETS = [
   { sym: "BTC/USD", base: 67500 },
@@ -35,6 +35,55 @@ const ASSETS = [
   { sym: "XAU/USD", base: 2640 },
   { sym: "EUR/USD", base: 1.085 },
 ];
+
+// Map trade asset symbols → Binance kline symbols (USDT pairs)
+const BINANCE_KLINE_MAP: Record<string, string> = {
+  "BTC/USD": "BTCUSDT",
+  "ETH/USD": "ETHUSDT",
+  "SOL/USD": "SOLUSDT",
+};
+
+// Fetch real 1-minute OHLCV candles from Binance public REST API (no auth required)
+async function fetchBinanceLiveCandles(sym: string, count = 120): Promise<Candle[] | null> {
+  const bSym = BINANCE_KLINE_MAP[sym];
+  if (!bSym) return null;
+  try {
+    // Try Binance first
+    const res = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=${bSym}&interval=1m&limit=${count}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) throw new Error("binance_fail");
+    const data = await res.json();
+    return (data as any[][]).map((k) => ({
+      time: Math.floor(k[0] / 1000) as import("lightweight-charts").Time,
+      open: Number(k[1]),
+      high: Number(k[2]),
+      low: Number(k[3]),
+      close: Number(k[4]),
+    }));
+  } catch {
+    // Bybit fallback for klines
+    try {
+      const res = await fetch(
+        `https://api.bybit.com/v5/market/kline?category=spot&symbol=${bSym}&interval=1&limit=${count}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (!res.ok) throw new Error("bybit_fail");
+      const j = await res.json();
+      const list: any[][] = j?.result?.list ?? [];
+      return list.reverse().map((k) => ({
+        time: Math.floor(Number(k[0]) / 1000) as import("lightweight-charts").Time,
+        open: Number(k[1]),
+        high: Number(k[2]),
+        low: Number(k[3]),
+        close: Number(k[4]),
+      }));
+    } catch {
+      return null;
+    }
+  }
+}
 
 function seedRand(seed: number) {
   let s = seed >>> 0;
@@ -189,7 +238,18 @@ function Dashboard() {
   // Reset candles when asset / mode / seed change
   useEffect(() => {
     randRef.current = seedRand(seed + 999);
-    setCandles(generateCandles(asset.sym, asset.base, mode, intensity, seed));
+    if (mode === "live") {
+      // Fetch real Binance candles; fall back to flat-generated candles if API fails
+      fetchBinanceLiveCandles(asset.sym).then((live) => {
+        if (live && live.length > 0) {
+          setCandles(live);
+        } else {
+          setCandles(generateCandles(asset.sym, asset.base, "flat", intensity, seed));
+        }
+      });
+    } else {
+      setCandles(generateCandles(asset.sym, asset.base, mode, intensity, seed));
+    }
   }, [assetSym, mode, intensity, seed, asset.sym, asset.base]);
 
   // Live tick: append a new candle every 3s

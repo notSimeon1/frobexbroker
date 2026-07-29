@@ -34,7 +34,7 @@ function AssetsPage() {
     queryKey: ["my_holdings", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data } = await supabase.from("user_holdings").select("*").eq("user_id", user.id).order("symbol", { ascending: true });
+      const { data } = await (supabase as any).from("user_holdings").select("*").eq("user_id", user.id).order("symbol", { ascending: true });
       return data ?? [];
     },
     enabled: !!user,
