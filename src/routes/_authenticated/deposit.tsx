@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
-import { useBinancePrices } from "@/hooks/useBinancePrices";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Copy, CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2,
   Search, Bitcoin, Coins, Shield, Receipt, CircleAlert as AlertCircle,
-  Upload, ArrowLeft, ArrowRight, Building2, Landmark, Wallet as WalletIcon, TrendingDown,
+  Upload, ArrowLeft, ArrowRight, Building2, Landmark, Wallet as WalletIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,13 +28,6 @@ const CRYPTOS: CryptoOption[] = [
   { id: "btc",        label: "Bitcoin",    symbol: "BTC",  network: "Bitcoin",       settingsKey: "deposit_wallet_btc",        icon: "btc" },
   { id: "eth",        label: "Ethereum",   symbol: "ETH",  network: "ERC20",         settingsKey: "deposit_wallet_eth",        icon: "eth" },
 ];
-
-const CRYPTO_PRICE_SYMBOLS: Record<string, string> = {
-  btc: "BTCUSDT",
-  eth: "ETHUSDT",
-  usdt_bep20: "USDTUSDT",
-  usdt_trc20: "USDTUSDT",
-};
 
 type Step = "select" | "generating" | "instructions" | "review";
 
@@ -84,9 +76,6 @@ function DepositPage() {
       return data ?? [];
     },
   });
-  const priceSymbols = useMemo(() => Array.from(new Set(Object.values(CRYPTO_PRICE_SYMBOLS))), []);
-  const { tickers } = useBinancePrices(priceSymbols);
-
   const { data: deposits, refetch } = useQuery({
     queryKey: ["my_deposits", user?.id],
     queryFn: async () => {
@@ -103,20 +92,6 @@ function DepositPage() {
   const baseAmount = Number(amount) || 0;
   const gasFeeAmount = Number((baseAmount * gasFeePercent / 100).toFixed(2));
   const totalPayable = Number((baseAmount + gasFeeAmount).toFixed(2));
-
-  const receiveCryptoAmount = useMemo(() => {
-    if (!selectedCrypto || totalPayable <= 0) return null;
-    const priceSymbol = CRYPTO_PRICE_SYMBOLS[selectedCrypto.id];
-    const price = priceSymbol ? tickers[priceSymbol]?.price ?? 0 : 0;
-    if (price <= 0) return null;
-    return totalPayable / price;
-  }, [selectedCrypto, totalPayable, tickers]);
-  const receiveLabel = useMemo(() => {
-    if (!selectedCrypto) return "";
-    if (receiveCryptoAmount == null) return "Waiting for live price…";
-    const decimals = selectedCrypto.symbol === "BTC" ? 6 : selectedCrypto.symbol === "ETH" ? 5 : 2;
-    return `~${receiveCryptoAmount.toFixed(decimals)} ${selectedCrypto.symbol}`;
-  }, [selectedCrypto, receiveCryptoAmount]);
 
   const filteredCryptos = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -235,7 +210,7 @@ function DepositPage() {
     });
 
     setSubmitting(false);
-    toast.success("Deposit request submitted");
+    toast.success("Deposit submitted — awaiting admin approval");
     setStep("select");
     setAmount(""); setTxHash(""); setReceiptFile(null); setUploadedUrl("");
     setGatewayKind(null); setSelectedCryptoId(""); setSelectedBankId("");
@@ -263,28 +238,14 @@ function DepositPage() {
           </div>
 
           {baseAmount > 0 && (
-            <>
             <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Receipt className="h-3.5 w-3.5" /> You will pay
+                <Receipt className="h-3.5 w-3.5" /> Payment breakdown
               </div>
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">Base:</span><span className="font-semibold tabular-nums">${baseAmount.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">Processing fee ({gasFeePercent}%):</span><span className="font-semibold tabular-nums text-destructive">${gasFeeAmount.toFixed(2)}</span></div>
               <div className="border-t border-border pt-2 flex justify-between text-sm"><span className="font-semibold">Total payable:</span><span className="font-bold tabular-nums text-primary">${totalPayable.toFixed(2)}</span></div>
             </div>
-            {gatewayKind === "crypto" && selectedCrypto && (
-              <div className="rounded-xl border border-success/30 bg-success/5 p-4 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <TrendingDown className="h-3.5 w-3.5" /> You will receive
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Estimated crypto credited</span>
-                  <span className="text-lg font-bold tabular-nums text-success">{receiveLabel}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">Live rate from Bybit/Binance. Final amount confirmed on settlement.</p>
-              </div>
-            )}
-            </>
           )}
 
           <div className="space-y-2">
@@ -417,7 +378,7 @@ function DepositPage() {
             <Label className="flex items-center gap-2 text-sm">
               <Upload className="h-4 w-4 text-primary" /> Payment receipt <span className="text-destructive">*</span>
             </Label>
-            <p className="text-xs text-muted-foreground">Upload a screenshot of your payment. Required before submission — your wallet will be credited upon confirmation.</p>
+            <p className="text-xs text-muted-foreground">Upload a screenshot of your payment. Required before submission — admin will verify and credit your wallet.</p>
             <Input type="file" accept="image/*,application/pdf" disabled={uploading}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadReceipt(f); }} />
             {uploading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</div>}
