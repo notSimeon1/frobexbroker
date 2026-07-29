@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send } from "lucide-react";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
