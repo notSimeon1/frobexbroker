@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/ai-bots")({
   head: () => ({
     meta: [
       { title: "AI Trading Bots — Frobex" },
-      { name: "description", content: "Automated AI trading bots with daily profit accrual." },
+      { name: "description", content: "Automated AI trading bots with hourly profit accrual." },
     ],
   }),
 });

@@ -234,7 +234,7 @@ function AuthPage() {
                     {m.change > 0 ? "+" : ""}{m.change.toFixed(2)}%
                   </Badge>
                 </div>
-                <div className="mt-2 text-xl font-bold tabular-nums">{m.price}</div>
+                <div className="mt-2 text-xs font-medium leading-relaxed text-foreground/90">{m.price}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">{m.note}</div>
               </Card>
             ))}
@@ -309,10 +309,10 @@ const WHY_ITEMS = [
 ];
 
 const MARKET_ROWS = [
-  { pair: "BTC / USDT", price: "$118,430.00", change:  2.14, note: "Broke $118k resistance overnight" },
-  { pair: "ETH / USDT", price: "$4,290.55",   change:  1.62, note: "ETF inflows accelerating"        },
-  { pair: "SOL / USDT", price: "$248.90",     change: -0.84, note: "Consolidating after 12% rally"   },
-  { pair: "SPX 500",    price: "$6,842.10",   change:  0.47, note: "Fed dovish minutes support risk" },
+  { pair: "BTC / USDT", price: "Bitcoin operates on a decentralized, permissionless blockchain using PoW.", change:  2.14, note: "Broke $118k resistance overnight" },
+  { pair: "ETH / USDT", price: "Ethereum introduced smart contracts and is the foundation for DeFi and NFTs.", change:  1.62, note: "ETF inflows accelerating"        },
+  { pair: "SOL / USDT", price: "Solana uses PoH and PoS to achieve high transaction throughput and low fees.", change: -0.84, note: "Consolidating after 12% rally"   },
+  { pair: "SPX 500",    price: "The SPX 500 is a market-cap weighted index of 500 large US-listed companies.", change:  0.47, note: "Fed dovish minutes support risk" },
 ];
 
 const INSIGHTS = [
