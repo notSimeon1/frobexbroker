@@ -147,11 +147,10 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
   const gradient = TIER_COLORS[bot.tier_key] ?? "from-primary to-primary/80";
   const minRoi = Number(bot.min_roi);
   const maxRoi = Number(bot.max_roi);
-  const hourlyEstimate = bot.tier_key === "bronze"
-    ? 10
-    : bot.tier_key === "alpha" || (bot.name ?? "").toLowerCase().includes("alpha core")
-      ? 11
-      : (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100 / 24;
+  const isHourly = bot.payout_interval === "hourly";
+  const hourlyEstimate = isHourly
+    ? Number(bot.hourly_payout ?? 0)
+    : (Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100 / 24;
   const hourlyRoi = (hourlyEstimate / Number(bot.capital_required)) * 100;
 
   const activate = async () => {
@@ -209,20 +208,26 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
               <div className="text-xl font-bold tabular-nums">${Number(bot.capital_required).toLocaleString()}</div>
             </div>
             <div className="rounded-lg bg-surface p-3">
-              <div className="text-xs text-muted-foreground">Daily ROI Range</div>
-              <div className="text-xl font-bold tabular-nums text-success">{minRoi.toFixed(1)}-{maxRoi.toFixed(1)}%</div>
+              <div className="text-xs text-muted-foreground">{isHourly ? "Hourly payout" : "Daily ROI Range"}</div>
+              <div className="text-xl font-bold tabular-nums text-success">
+                {isHourly ? `$${hourlyEstimate.toFixed(2)}/hr` : `${minRoi.toFixed(1)}-${maxRoi.toFixed(1)}%`}
+              </div>
             </div>
           </div>
 
           <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
             <div className="flex items-center gap-2 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span className="text-muted-foreground">Est. hourly profit:</span>
+              <span className="text-muted-foreground">{isHourly ? "Credited every hour on the hour:" : "Est. hourly profit:"}</span>
               <span className="font-bold text-success tabular-nums">~${hourlyEstimate.toFixed(2)}/hour</span>
             </div>
             <div className="flex items-center gap-2 mt-1 text-xs">
               <Timer className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Hourly ROI: ~{hourlyRoi.toFixed(2)}%/hr · Duration: {bot.duration_days} days</span>
+              <span className="text-muted-foreground">
+                {isHourly
+                  ? `Hourly cycle · ~${hourlyRoi.toFixed(2)}%/hr · Duration: ${bot.duration_days} days`
+                  : `Daily cycle · random ${minRoi.toFixed(0)}–${maxRoi.toFixed(0)}% per day · Duration: ${bot.duration_days} days`}
+              </span>
             </div>
           </div>
 
@@ -248,7 +253,7 @@ function BotCard({ bot, balance, index }: { bot: any; balance: number; index: nu
               <div className="space-y-4">
                 <div className="rounded-lg bg-surface p-3 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Available balance:</span><span className="font-bold tabular-nums">${balance.toFixed(2)}</span></div>
-                  <div className="flex justify-between mt-1"><span className="text-muted-foreground">Hourly ROI:</span><span className="font-bold text-success">~{((Number(bot.capital_required) * ((minRoi + maxRoi) / 2)) / 100 / 24).toFixed(2)}%/hr</span></div>
+                  <div className="flex justify-between mt-1"><span className="text-muted-foreground">{isHourly ? "Hourly payout:" : "Daily ROI:"}</span><span className="font-bold text-success">{isHourly ? `$${hourlyEstimate.toFixed(2)}/hr` : `${minRoi.toFixed(0)}–${maxRoi.toFixed(0)}%/day`}</span></div>
                   <div className="flex justify-between mt-1"><span className="text-muted-foreground">Duration:</span><span className="font-bold">{bot.duration_days} days</span></div>
                 </div>
                 <div>
