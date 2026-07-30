@@ -280,10 +280,13 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          lock_in_days: number
           monthly_roi_max: number
           monthly_roi_min: number
           perks: Json
+          profit_share: number
           required_capital: number
+          risk_rating: string
           sort_order: number
           strategist_name: string
           tier_key: string
@@ -295,10 +298,13 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          lock_in_days?: number
           monthly_roi_max: number
           monthly_roi_min: number
           perks?: Json
+          profit_share?: number
           required_capital: number
+          risk_rating?: string
           sort_order?: number
           strategist_name: string
           tier_key: string
@@ -310,10 +316,13 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          lock_in_days?: number
           monthly_roi_max?: number
           monthly_roi_min?: number
           perks?: Json
+          profit_share?: number
           required_capital?: number
+          risk_rating?: string
           sort_order?: number
           strategist_name?: string
           tier_key?: string
@@ -883,10 +892,12 @@ export type Database = {
           capital_required: number
           created_at: string
           duration_days: number
+          hourly_payout: number
           id: string
           max_roi: number
           min_roi: number
           name: string
+          payout_interval: string
           perks: Json
           sort_order: number
           status: string
@@ -898,10 +909,12 @@ export type Database = {
           capital_required: number
           created_at?: string
           duration_days?: number
+          hourly_payout?: number
           id?: string
           max_roi: number
           min_roi: number
           name: string
+          payout_interval?: string
           perks?: Json
           sort_order?: number
           status?: string
@@ -913,10 +926,12 @@ export type Database = {
           capital_required?: number
           created_at?: string
           duration_days?: number
+          hourly_payout?: number
           id?: string
           max_roi?: number
           min_roi?: number
           name?: string
+          payout_interval?: string
           perks?: Json
           sort_order?: number
           status?: string
@@ -1033,6 +1048,7 @@ export type Database = {
           expiration_date: string
           id: string
           invested_amount: number
+          last_payout_at: string
           status: string
           user_id: string
         }
@@ -1044,6 +1060,7 @@ export type Database = {
           expiration_date: string
           id?: string
           invested_amount: number
+          last_payout_at?: string
           status?: string
           user_id: string
         }
@@ -1055,6 +1072,7 @@ export type Database = {
           expiration_date?: string
           id?: string
           invested_amount?: number
+          last_payout_at?: string
           status?: string
           user_id?: string
         }
@@ -1354,9 +1372,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accrue_bot_profits: { Args: never; Returns: Json }
       accrue_daily_bot_profits: { Args: never; Returns: Json }
       activate_bot: {
         Args: { _bot_id: string; _invested_amount: number }
+        Returns: string
+      }
+      activate_copy_trading: {
+        Args: { _allocated_amount: number; _tier_id: string }
         Returns: string
       }
       admin_adjust_crypto: {
@@ -1452,6 +1475,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       notify_user: {
         Args: {
           _message: string

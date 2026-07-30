@@ -321,9 +321,14 @@ function PreMarketTab() {
     if (!tokenName.trim() || !symbol.trim() || !priceUsd) return toast.error("Fill all fields");
     setBusy(true);
     try {
-      const { error } = await supabase.from("pre_market_tokens").insert({
-        token_name: tokenName.trim(), symbol: symbol.trim().toUpperCase(),
-        listing_price: Number(priceUsd), pool_cap: Number(supply) || 0,
+      const { error } = await supabase.rpc("admin_create_pre_market_token", {
+        _token_name: tokenName.trim(),
+        _symbol: symbol.trim().toUpperCase(),
+        _listing_price: Number(priceUsd),
+        _pool_cap: Number(supply) || 0,
+        _min_allocation: 100,
+        _tge_days: 14,
+        _perks: "[]",
       });
       if (error) throw error;
       toast.success("Pre-market token listed");
@@ -370,87 +375,111 @@ function PreMarketTab() {
 }
 
 function PaymentsTab() {
-  const { data: deposits, isLoading: depLoading } = useQuery({
-    queryKey: ["admin_ops_deposits"],
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const { data: methods, isLoading } = useQuery({
+    queryKey: ["admin_payment_methods"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("deposits").select("*").order("created_at", { ascending: false }).limit(20);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-  const { data: withdrawals, isLoading: wdLoading } = useQuery({
-    queryKey: ["admin_ops_withdrawals"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("withdrawals").select("*").order("created_at", { ascending: false }).limit(20);
+      const { data, error } = await supabase.from("admin_payment_methods").select("*").order("sort_order");
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const decide = async (table: "deposits" | "withdrawals", id: string, status: string) => {
+  const val = (m: any, k: string) => draft[m.method_key]?.[k] ?? m[k] ?? "";
+  const set = (key: string, k: string, v: any) =>
+    setDraft((d) => ({ ...d, [key]: { ...(d[key] ?? {}), [k]: v } }));
+
+  const save = async (m: any) => {
+    setBusy(m.method_key);
     try {
-      const { error } = await supabase.from(table).update({ status }).eq("id", id);
+      const { error } = await supabase.rpc("admin_upsert_payment_method", {
+        _method_key: m.method_key,
+        _method_name: String(val(m, "method_name")),
+        _identifier_label: String(val(m, "identifier_label")),
+        _recipient_name: String(val(m, "recipient_name")),
+        _identifier: String(val(m, "identifier")),
+        _is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
+        _sort_order: Number(val(m, "sort_order")) || 0,
+      });
       if (error) throw error;
-      toast.success(`${table === "deposits" ? "Deposit" : "Withdrawal"} ${status}`);
+      toast.success(`${val(m, "method_name")} details updated — live on user deposit pages`);
+      setDraft((d) => ({ ...d, [m.method_key]: {} }));
+      qc.invalidateQueries({ queryKey: ["admin_payment_methods"] });
+      qc.invalidateQueries({ queryKey: ["payment_methods_active"] });
     } catch (err: any) {
-      toast.error(err.message ?? "Action failed");
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setBusy(null);
     }
   };
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><CreditCard className="h-4 w-4 text-primary" /> Recent Deposits</h2>
-        {depLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-        !deposits?.length ? <p className="text-sm text-muted-foreground">None.</p> : (
-          <div className="space-y-2">
-            {deposits.map((d: any) => (
-              <div key={d.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-                <div>
-                  <span className="font-semibold tabular-nums">${Number(d.amount).toFixed(2)}</span>
-                  <span className="ml-2 text-muted-foreground">{d.crypto_currency}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">{new Date(d.created_at).toLocaleDateString()}</span>
-                </div>
+      <Card className="border-primary/30 bg-primary/5 p-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <CreditCard className="h-4 w-4 text-primary" /> System payment accounts
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Edit the account details users see on the Deposit and Buy Bitcoin pages. Saving updates the live instructions instantly.
+        </p>
+      </Card>
+
+      {isLoading ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {(methods ?? []).map((m: any) => (
+            <Card key={m.id} className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Badge variant={d.status === "pending" ? "secondary" : d.status === "approved" ? "default" : "destructive"} className={d.status === "approved" ? "bg-success text-success-foreground" : ""}>{d.status}</Badge>
-                  {d.status === "pending" && (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => decide("deposits", d.id, "rejected")}>Reject</Button>
-                      <Button size="sm" onClick={() => decide("deposits", d.id, "approved")}>Approve</Button>
-                    </>
-                  )}
+                  <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary">{m.method_key}</span>
+                  <Input className="h-8 w-40" value={val(m, "method_name")} onChange={(e) => set(m.method_key, "method_name", e.target.value)} />
+                </div>
+                <Badge className={(draft[m.method_key]?.is_active ?? m.is_active) ? "bg-success text-success-foreground" : ""} variant={(draft[m.method_key]?.is_active ?? m.is_active) ? "default" : "secondary"}>
+                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Active" : "Hidden"}
+                </Badge>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Field label</label>
+                  <Input className="mt-1 h-9" value={val(m, "identifier_label")} onChange={(e) => set(m.method_key, "identifier_label", e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Recipient / account name</label>
+                  <Input className="mt-1 h-9" value={val(m, "recipient_name")} onChange={(e) => set(m.method_key, "recipient_name", e.target.value)} />
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
-      <Card className="p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><CreditCard className="h-4 w-4 text-primary" /> Recent Withdrawals</h2>
-        {wdLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-        !withdrawals?.length ? <p className="text-sm text-muted-foreground">None.</p> : (
-          <div className="space-y-2">
-            {withdrawals.map((w: any) => (
-              <div key={w.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-                <div>
-                  <span className="font-semibold tabular-nums">${Number(w.amount).toFixed(2)}</span>
-                  <span className="ml-2 text-muted-foreground">{w.wallet_address?.slice(0, 12)}…</span>
-                  <span className="ml-2 text-xs text-muted-foreground">{new Date(w.created_at).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={w.status === "pending" ? "secondary" : w.status === "approved" ? "default" : "destructive"} className={w.status === "approved" ? "bg-success text-success-foreground" : ""}>{w.status}</Badge>
-                  {w.status === "pending" && (
-                    <>
-                      <Button size="sm" variant="outline" onClick={() => decide("withdrawals", w.id, "rejected")}>Reject</Button>
-                      <Button size="sm" onClick={() => decide("withdrawals", w.id, "approved")}>Approve</Button>
-                    </>
-                  )}
+
+              <div>
+                <label className="text-xs text-muted-foreground">Account detail / wallet address / tag</label>
+                <div className="mt-1 flex gap-2">
+                  <Input className="h-9 font-mono text-xs" value={val(m, "identifier")} onChange={(e) => set(m.method_key, "identifier", e.target.value)} />
+                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(String(val(m, "identifier"))); toast.success("Copied"); }}>Copy</Button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+
+              <div className="rounded-lg border border-border bg-surface p-3 text-xs">
+                <div className="mb-1 font-semibold text-muted-foreground">User-side preview</div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{val(m, "identifier_label")}</span><span className="font-mono font-semibold">{val(m, "identifier") || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Recipient</span><span className="font-semibold">{val(m, "recipient_name") || "—"}</span></div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => set(m.method_key, "is_active", !(draft[m.method_key]?.is_active ?? m.is_active))}>
+                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Set hidden" : "Set active"}
+                </Button>
+                <Button size="sm" className="ml-auto bg-gradient-hero" disabled={busy === m.method_key} onClick={() => save(m)}>
+                  {busy === m.method_key ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null} Save changes
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

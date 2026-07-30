@@ -186,6 +186,27 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
             </div>
           </div>
 
+          <div className="flex flex-wrap gap-2 text-[10px]">
+            <Badge variant="secondary" title="Share of profits paid to the strategist">
+              {Number(tier.profit_share ?? 20).toFixed(0)}% profit share
+            </Badge>
+            <Badge
+              title="Risk rating based on historical drawdown"
+              className={
+                tier.risk_rating === "High"
+                  ? "bg-destructive/15 text-destructive border-destructive/30"
+                  : tier.risk_rating === "Low"
+                    ? "bg-success/15 text-success border-success/30"
+                    : "bg-primary/15 text-primary border-primary/30"
+              }
+            >
+              {tier.risk_rating ?? "Medium"} risk
+            </Badge>
+            <Badge variant="outline" title="Minimum period before the allocation can be withdrawn">
+              {Number(tier.lock_in_days ?? 30)}-day lock-in
+            </Badge>
+          </div>
+
           <ul className="space-y-1.5">
             {(tier.perks as string[]).map((perk, i) => (
               <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
