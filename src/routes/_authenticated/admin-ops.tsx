@@ -321,9 +321,14 @@ function PreMarketTab() {
     if (!tokenName.trim() || !symbol.trim() || !priceUsd) return toast.error("Fill all fields");
     setBusy(true);
     try {
-      const { error } = await supabase.from("pre_market_tokens").insert({
-        token_name: tokenName.trim(), symbol: symbol.trim().toUpperCase(),
-        listing_price: Number(priceUsd), pool_cap: Number(supply) || 0,
+      const { error } = await supabase.rpc("admin_create_pre_market_token", {
+        _token_name: tokenName.trim(),
+        _symbol: symbol.trim().toUpperCase(),
+        _listing_price: Number(priceUsd),
+        _pool_cap: Number(supply) || 0,
+        _min_allocation: 100,
+        _tge_days: 14,
+        _perks: "[]",
       });
       if (error) throw error;
       toast.success("Pre-market token listed");

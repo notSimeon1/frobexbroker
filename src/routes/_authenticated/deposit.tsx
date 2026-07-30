@@ -104,6 +104,10 @@ function DepositPage() {
   const gasFeeAmount = Number((baseAmount * gasFeePercent / 100).toFixed(2));
   const totalPayable = Number((baseAmount + gasFeeAmount).toFixed(2));
 
+  const selectedCrypto = CRYPTOS.find((c) => c.id === selectedCryptoId);
+  const selectedBank = (bankMethods ?? []).find((b: any) => b.id === selectedBankId);
+  const wallet = selectedCrypto ? settings?.[selectedCrypto.settingsKey] : undefined;
+
   const receiveCryptoAmount = useMemo(() => {
     if (!selectedCrypto || totalPayable <= 0) return null;
     const priceSymbol = CRYPTO_PRICE_SYMBOLS[selectedCrypto.id];
@@ -133,9 +137,6 @@ function DepositPage() {
     }
   };
 
-  const selectedCrypto = CRYPTOS.find((c) => c.id === selectedCryptoId);
-  const selectedBank = (bankMethods ?? []).find((b: any) => b.id === selectedBankId);
-  const wallet = selectedCrypto ? settings?.[selectedCrypto.settingsKey] : undefined;
 
   // 2-hour countdown, keyed to entering instructions step
   const deadlineRef = useRef<number>(0);
