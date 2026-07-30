@@ -8,6 +8,8 @@ import {
   adminDecideWithdrawal,
   adminGetKycDocumentUrl,
   adminGetOverview,
+  adminGetPlatformSettings,
+  adminSavePlatformSetting,
   adminPostNews,
   adminToggleAiTrading,
   adminToggleAccountMode,
@@ -45,6 +47,11 @@ const openPositionSchema = z.object({
   accountMode: z.enum(["demo", "live"]),
 });
 const closePositionSchema = z.object({ id: z.string().uuid(), closePrice: z.number().positive() });
+const platformSettingSchema = z.object({
+  keyName: z.string().min(1).max(120),
+  value: z.string().min(0).max(2000),
+  category: z.string().max(60).optional(),
+});
 
 export const getAdminOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -128,3 +135,14 @@ export const closePosition = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => closePositionSchema.parse(input))
   .handler(async ({ data, context }) => closeUserPosition(context.userId, data.id, data.closePrice));
+
+export const getPlatformSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => adminGetPlatformSettings(context.userId));
+
+export const savePlatformSetting = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => platformSettingSchema.parse(input))
+  .handler(async ({ data, context }) =>
+    adminSavePlatformSetting(context.userId, data.keyName, data.value, data.category),
+  );

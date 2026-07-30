@@ -10,6 +10,8 @@ import {
   decideAdminWithdrawal,
   getAdminKycUrl,
   getAdminOverview,
+  getPlatformSettings,
+  savePlatformSetting,
   postAdminNews,
   toggleAdminAiTrading,
   toggleAdminAccountMode,
@@ -28,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck } from "lucide-react";
+import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck, Clock, Settings2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -120,7 +122,7 @@ function AdminPage() {
           <TabsTrigger value="support" className="shrink-0"><Headphones className="mr-1 h-3.5 w-3.5" />Support</TabsTrigger>
           <TabsTrigger value="roles" className="shrink-0"><UserCog className="mr-1 h-3.5 w-3.5" />Roles</TabsTrigger>
           <TabsTrigger value="audit" className="shrink-0"><ScrollText className="mr-1 h-3.5 w-3.5" />Audit</TabsTrigger>
-          <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">💼 Wallets</TabsTrigger>
+          <TabsTrigger value="settings" className="shrink-0 ml-auto bg-primary/10 text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Settings2 className="mr-1 h-3.5 w-3.5" />Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="deposits"><DepositsTab items={overviewQuery.data?.deposits} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
@@ -130,7 +132,7 @@ function AdminPage() {
         <TabsContent value="kyc"><KycTab items={overviewQuery.data?.kyc} users={overviewQuery.data?.users} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="news"><NewsTab items={overviewQuery.data?.news} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="complaints"><ComplaintsTab items={overviewQuery.data?.complaints} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
-        <TabsContent value="settings"><SettingsTab items={overviewQuery.data?.settings} loading={overviewQuery.isLoading} refetch={overviewQuery.refetch} /></TabsContent>
+        <TabsContent value="settings"><SettingsTab walletItems={overviewQuery.data?.settings} walletsLoading={overviewQuery.isLoading} refetchWallets={overviewQuery.refetch} /></TabsContent>
         <TabsContent value="bots"><AdminBotsTab /></TabsContent>
         <TabsContent value="copy"><AdminCopyTab /></TabsContent>
         <TabsContent value="premarket"><AdminPreMarketTab /></TabsContent>
@@ -611,49 +613,330 @@ function ComplaintsTab({ items, loading, refetch }: { items?: any[]; loading: bo
   );
 }
 
-function SettingsTab({ items, loading, refetch }: { items?: any[]; loading: boolean; refetch: () => void | Promise<unknown> }) {
-  const updateSetting = useServerFn(updateAdminSetting);
-  const [vals, setVals] = useState<Record<string, string>>({});
-  useEffect(() => {
-    if (items) {
-      const m: Record<string, string> = {};
-      items.forEach((r: any) => { m[r.key] = r.value; });
-      setVals(m);
-    }
-  }, [items]);
+// ── Comprehensive Settings Tab ─────────────────────────────────────────────
 
-  const save = async (key: string) => {
+type PlatformRow = { id: string; category: string; key_name: string; value: string; description?: string };
+
+type FieldDef = {
+  key: string;
+  label: string;
+  type: "number" | "text";
+  unit?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+};
+
+type SectionDef = {
+  category: string;
+  label: string;
+  icon: React.ReactNode;
+  fields: FieldDef[];
+};
+
+const SETTINGS_SECTIONS: SectionDef[] = [
+  {
+    category: "fees",
+    label: "Fees & Rates",
+    icon: <DollarSign className="h-4 w-4" />,
+    fields: [
+      { key: "min_deposit_usd",              label: "Minimum deposit",             type: "number", unit: "$",    min: 1,      step: 1 },
+      { key: "gas_fee_percent",              label: "Processing / gas fee",        type: "number", unit: "%",    min: 0, max: 100, step: 0.1 },
+      { key: "withdrawal_tax_percent",       label: "Withdrawal tax",              type: "number", unit: "%",    min: 0, max: 100, step: 0.1 },
+      { key: "referral_profit_share_percent",label: "Referral deposit bonus",      type: "number", unit: "%",    min: 0, max: 100, step: 1 },
+      { key: "referral_min_deposit_usd",     label: "Min deposit to trigger referral", type: "number", unit: "$", min: 0, step: 1 },
+      { key: "withdrawal_clearing_days",     label: "Withdrawal clearing period",  type: "number", unit: "days", min: 0, max: 90, step: 1 },
+      { key: "max_leverage",                 label: "Maximum trading leverage",    type: "number", unit: "×",    min: 1, max: 2000, step: 1 },
+    ],
+  },
+  {
+    category: "financial",
+    label: "Financial Limits",
+    icon: <BarChart3 className="h-4 w-4" />,
+    fields: [
+      { key: "max_deposit_usd",       label: "Maximum single deposit",      type: "number", unit: "$",  min: 100,  step: 1000 },
+      { key: "min_withdrawal_usd",    label: "Minimum withdrawal",          type: "number", unit: "$",  min: 1,    step: 1 },
+      { key: "max_withdrawal_usd",    label: "Maximum single withdrawal",   type: "number", unit: "$",  min: 100,  step: 1000 },
+      { key: "demo_balance_default",  label: "Demo account start balance",  type: "number", unit: "$",  min: 100,  step: 1000 },
+    ],
+  },
+  {
+    category: "timing",
+    label: "Time Intervals",
+    icon: <Clock className="h-4 w-4" />,
+    fields: [
+      { key: "payment_expiry_hours",       label: "Buy-BTC payment window",           type: "number", unit: "hrs", min: 0.25, max: 168, step: 0.25 },
+      { key: "deposit_processing_hours",   label: "Deposit processing ETA (display)", type: "number", unit: "hrs", min: 0.5,  max: 72,  step: 0.5 },
+      { key: "withdrawal_processing_hours",label: "Withdrawal processing ETA",        type: "number", unit: "hrs", min: 1,    max: 336, step: 1 },
+      { key: "kyc_review_hours",           label: "KYC review SLA (display)",         type: "number", unit: "hrs", min: 1,    max: 336, step: 1 },
+    ],
+  },
+  {
+    category: "trading",
+    label: "Trading & AI Bots",
+    icon: <Cpu className="h-4 w-4" />,
+    fields: [
+      { key: "chart_drift_pct",           label: "Chart drift intensity",               type: "number", min: 0,      max: 5,      step: 0.01 },
+      { key: "chart_volatility",          label: "Candle volatility factor",            type: "number", min: 0.0001, max: 0.5,    step: 0.0001 },
+      { key: "ai_trade_cooldown_seconds", label: "AI trade cooldown (between trades)",  type: "number", unit: "s",   min: 1,      max: 600,    step: 1 },
+      { key: "ai_loss_cooldown_seconds",  label: "AI loss cooldown (after loss)",       type: "number", unit: "s",   min: 1,      max: 1200,   step: 1 },
+      { key: "min_ai_trade_usd",          label: "Min AI trade size",                   type: "number", unit: "$",   min: 1,      step: 1 },
+      { key: "max_ai_trade_usd",          label: "Max AI trade size",                   type: "number", unit: "$",   min: 10,     step: 10 },
+      { key: "default_signal_credits",    label: "Signal credits on signup",            type: "number", min: 0,      max: 1000,   step: 1 },
+    ],
+  },
+  {
+    category: "branding",
+    label: "Branding & Contact",
+    icon: <Megaphone className="h-4 w-4" />,
+    fields: [
+      { key: "hero_headline",   label: "Hero section headline", type: "text", placeholder: "Trade Smarter, Earn Bigger" },
+      { key: "support_email",   label: "Support email address", type: "text", placeholder: "support@frobex.io" },
+      { key: "platform_name",   label: "Platform display name", type: "text", placeholder: "Frobex" },
+    ],
+  },
+];
+
+const WALLET_LABELS: Record<string, string> = {
+  deposit_wallet_usdt:       "USDT (ERC-20) deposit address",
+  deposit_wallet_usdt_bep20: "USDT BEP-20 (BSC) deposit address",
+  deposit_wallet_usdt_trc20: "USDT TRC-20 (Tron) deposit address",
+  deposit_wallet_btc:        "BTC deposit address",
+  deposit_wallet_eth:        "ETH (ERC-20) deposit address",
+};
+
+function SettingField({
+  field,
+  value,
+  onChange,
+  onSave,
+  saving,
+}: {
+  field: FieldDef;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">{field.label}</Label>
+        <div className="flex items-center">
+          {field.unit && (
+            <span className="flex items-center rounded-l-md border border-r-0 border-border bg-muted/50 px-2.5 py-2 text-xs text-muted-foreground select-none">
+              {field.unit}
+            </span>
+          )}
+          <Input
+            type={field.type === "number" ? "number" : "text"}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onSave()}
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            placeholder={field.placeholder}
+            className={`h-9 text-sm ${field.unit ? "rounded-l-none" : ""}`}
+          />
+        </div>
+      </div>
+      <Button size="sm" variant="secondary" onClick={onSave} disabled={saving} className="h-9 px-3">
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+      </Button>
+    </div>
+  );
+}
+
+function SettingsTab({
+  walletItems,
+  walletsLoading,
+  refetchWallets,
+}: {
+  walletItems?: any[];
+  walletsLoading: boolean;
+  refetchWallets: () => void | Promise<unknown>;
+}) {
+  const fetchPlatform = useServerFn(getPlatformSettings);
+  const savePlatform  = useServerFn(savePlatformSetting);
+  const updateWallet  = useServerFn(updateAdminSetting);
+
+  // Local editable state for platform settings: key_name → value string
+  const [platformVals, setPlatformVals] = useState<Record<string, string>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // Local editable state for wallets (app_settings)
+  const [walletVals, setWalletVals] = useState<Record<string, string>>({});
+  const [savingWallet, setSavingWallet] = useState<string | null>(null);
+
+  // Load platform settings
+  const { data: platformRows, isLoading: loadingPlatform, refetch: refetchPlatform } = useQuery<PlatformRow[]>({
+    queryKey: ["admin_platform_settings"],
+    queryFn: () => fetchPlatform(),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (platformRows) {
+      const m: Record<string, string> = {};
+      platformRows.forEach((r) => { m[r.key_name] = r.value; });
+      setPlatformVals((prev) => {
+        // Only initialise keys we don't have locally yet (don't overwrite mid-edit)
+        const merged = { ...m };
+        Object.entries(prev).forEach(([k, v]) => { if (v !== m[k]) merged[k] = v; });
+        return merged;
+      });
+    }
+  }, [platformRows]);
+
+  useEffect(() => {
+    if (walletItems) {
+      const m: Record<string, string> = {};
+      walletItems.forEach((r: any) => { m[r.key] = r.value; });
+      setWalletVals((prev) => {
+        const merged = { ...m };
+        Object.entries(prev).forEach(([k, v]) => { if (v !== m[k]) merged[k] = v; });
+        return merged;
+      });
+    }
+  }, [walletItems]);
+
+  const savePlatformKey = async (keyName: string, category: string) => {
+    setSavingKey(keyName);
     try {
-      await updateSetting({ data: { key, value: vals[key] } });
-      toast.success("Saved");
-      await refetch();
+      await savePlatform({ data: { keyName, value: String(platformVals[keyName] ?? ""), category } });
+      toast.success("Setting saved");
+      await refetchPlatform();
     } catch (err: any) {
-      toast.error(err.message ?? "Could not save setting");
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setSavingKey(null);
     }
   };
 
-  if (loading) return <Card className="p-6"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  const saveWalletKey = async (key: string) => {
+    setSavingWallet(key);
+    try {
+      await updateWallet({ data: { key, value: walletVals[key] ?? "" } });
+      toast.success("Wallet address saved");
+      await refetchWallets();
+    } catch (err: any) {
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setSavingWallet(null);
+    }
+  };
 
-  const labels: Record<string, string> = {
-    deposit_wallet_usdt: "USDT (default) deposit address",
-    deposit_wallet_usdt_bep20: "USDT BEP20 (BSC) deposit address",
-    deposit_wallet_usdt_trc20: "USDT TRC20 (Tron) deposit address",
-    deposit_wallet_btc: "BTC deposit address",
-    deposit_wallet_eth: "ETH (ERC20) deposit address",
+  if (loadingPlatform && walletsLoading) {
+    return (
+      <Card className="p-6 flex items-center gap-3">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Loading settings…</span>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Platform settings — one card per section */}
+      {SETTINGS_SECTIONS.map((section) => (
+        <Card key={section.category} className="overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-3">
+            <span className="text-primary">{section.icon}</span>
+            <h3 className="text-sm font-semibold">{section.label}</h3>
+          </div>
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            {section.fields.map((field) => (
+              <SettingField
+                key={field.key}
+                field={field}
+                value={platformVals[field.key] ?? ""}
+                onChange={(v) => setPlatformVals((prev) => ({ ...prev, [field.key]: v }))}
+                onSave={() => savePlatformKey(field.key, section.category)}
+                saving={savingKey === field.key}
+              />
+            ))}
+          </div>
+        </Card>
+      ))}
+
+      {/* Wallet / deposit addresses — from app_settings */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-5 py-3">
+          <Wallet className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Deposit Wallet Addresses</h3>
+        </div>
+        <div className="space-y-4 p-5">
+          {walletsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : (
+            Object.entries(walletVals).map(([k, v]) => (
+              <div key={k} className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  {WALLET_LABELS[k] ?? k}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={v}
+                    onChange={(e) => setWalletVals((prev) => ({ ...prev, [k]: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Enter" && saveWalletKey(k)}
+                    className="font-mono text-xs"
+                    placeholder="0x…"
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => saveWalletKey(k)}
+                    disabled={savingWallet === k}
+                    className="shrink-0"
+                  >
+                    {savingWallet === k ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+          {/* Allow adding any new wallet key the admin names */}
+          <AddWalletRow onSave={async (key, value) => { await updateWallet({ data: { key, value } }); await refetchWallets(); }} />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function AddWalletRow({ onSave }: { onSave: (key: string, value: string) => Promise<void> }) {
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handle = async () => {
+    if (!key.trim() || !value.trim()) return toast.error("Both key and address are required");
+    setSaving(true);
+    try {
+      await onSave(key.trim(), value.trim());
+      toast.success("Wallet added");
+      setKey(""); setValue("");
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Card className="p-6 space-y-4">
-      {Object.keys(vals).map((k) => (
-        <div key={k} className="space-y-2">
-          <Label>{labels[k] ?? k}</Label>
-          <div className="flex gap-2">
-            <Input value={vals[k]} onChange={(e) => setVals({ ...vals, [k]: e.target.value })} />
-            <Button onClick={() => save(k)}><Save className="h-4 w-4" /></Button>
-          </div>
-        </div>
-      ))}
-    </Card>
+    <div className="mt-2 space-y-2 rounded-xl border border-dashed border-border p-3">
+      <p className="text-xs text-muted-foreground font-medium">Add / override a wallet key</p>
+      <div className="grid grid-cols-2 gap-2">
+        <Input placeholder="key e.g. deposit_wallet_sol" value={key} onChange={(e) => setKey(e.target.value)} className="text-xs" />
+        <Input placeholder="address" value={value} onChange={(e) => setValue(e.target.value)} className="font-mono text-xs" />
+      </div>
+      <Button size="sm" variant="outline" onClick={handle} disabled={saving} className="w-full">
+        {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />} Save wallet
+      </Button>
+    </div>
   );
 }
 

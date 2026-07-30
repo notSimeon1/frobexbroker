@@ -168,8 +168,7 @@ export async function adminGetOverview(userId: string) {
 export async function adminDecideDeposit(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
 
-  // Pass the actor explicitly so the DB-side admin check can evaluate the real caller
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status, _actor: userId });
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_deposit_atomic", { _deposit_id: id, _status: status });
   if (!rpc.error) return { ok: true };
 
   const { data: deposit, error: fetchError } = await supabaseAdmin.from("deposits").select("*").eq("id", id).maybeSingle();
@@ -194,11 +193,13 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
     await syncPendingActivity(deposit.user_id, "deposit_request", amount, `Approved deposit ${deposit.crypto_currency}`, "approved", "deposits", deposit.id);
 
     if (profile.referred_by) {
-      const bonus = money(amount * 0.2);
+      const bonusPct = await getPlatformNumeric("referral_profit_share_percent", 20) / 100;
+      const bonus = money(amount * bonusPct);
+      const bonusLabel = `${Math.round(bonusPct * 100)}%`;
       const { data: referrer } = await supabaseAdmin.from("profiles").select("account_balance, available_cash, live_balance").eq("id", profile.referred_by).maybeSingle();
       if (referrer) await updateProfileBalance(profile.referred_by, referrer, bonus, "live");
       await supabaseAdmin.from("referral_earnings").insert({ referrer_id: profile.referred_by, referred_user_id: deposit.user_id, deposit_id: deposit.id, amount: bonus });
-      await writeActivity(profile.referred_by, "referral_bonus", bonus, "Referral commission (20%)", "completed", "deposits", deposit.id);
+      await writeActivity(profile.referred_by, "referral_bonus", bonus, `Referral commission (${bonusLabel})`, "completed", "deposits", deposit.id);
     }
   } else {
     const { error: updateError } = await supabaseAdmin.from("deposits").update({ status, reviewed_at: new Date().toISOString() }).eq("id", id).eq("status", "pending");
@@ -211,8 +212,7 @@ export async function adminDecideDeposit(userId: string, id: string, status: Adm
 export async function adminDecideWithdrawal(userId: string, id: string, status: AdminStatus) {
   await assertOwner(userId);
   const feeWallet = await getSetting("deposit_wallet_usdt_bep20");
-  // Pass actor so DB admin checks evaluate correctly when invoked via service-role client
-  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", { _withdrawal_id: id, _status: status, _fee_wallet: feeWallet, _actor: userId });
+  const rpc = await (supabaseAdmin as any).rpc("admin_decide_withdrawal_atomic", { _withdrawal_id: id, _status: status, _fee_wallet: feeWallet });
   if (!rpc.error) return { ok: true };
 
   const { data: withdrawal, error: fetchError } = await supabaseAdmin.from("withdrawals").select("*").eq("id", id).maybeSingle();
@@ -221,7 +221,9 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
   if (withdrawal.status !== "pending") return { ok: true };
 
   const amount = money(withdrawal.amount);
-  const tax = money(amount * 0.05);
+  const taxPct = await getPlatformNumeric("withdrawal_tax_percent", 5) / 100;
+  const tax = money(amount * taxPct);
+  const taxPctLabel = Math.round(taxPct * 100);
   const payout = Math.max(0, money(amount - tax));
 
   if (status === "approved") {
@@ -244,8 +246,8 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
     if (updateError) throw new Error(updateError.message);
 
     await updateProfileBalance(withdrawal.user_id, profile, -amount, "live");
-    await syncPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Approved withdrawal ${withdrawal.crypto_currency} · payout $${payout.toFixed(2)} · 5% tax fee $${tax.toFixed(2)}`, "approved", "withdrawals", withdrawal.id);
-    await writeActivity(withdrawal.user_id, "withdrawal_tax_fee", tax, `5% withdrawal tax paid to ${feeWallet}`, "completed", "withdrawals", withdrawal.id);
+    await syncPendingActivity(withdrawal.user_id, "withdrawal_request", amount, `Approved withdrawal ${withdrawal.crypto_currency} · payout $${payout.toFixed(2)} · ${taxPctLabel}% tax fee $${tax.toFixed(2)}`, "approved", "withdrawals", withdrawal.id);
+    await writeActivity(withdrawal.user_id, "withdrawal_tax_fee", tax, `${taxPctLabel}% withdrawal tax paid to ${feeWallet}`, "completed", "withdrawals", withdrawal.id);
   } else {
     const { error: updateError } = await supabaseAdmin.from("withdrawals").update({ status, reviewed_at: new Date().toISOString(), tax_fee: tax, payout_amount: payout, fee_wallet_address: feeWallet } as never).eq("id", id).eq("status", "pending");
     if (updateError) throw new Error(updateError.message);
@@ -256,7 +258,7 @@ export async function adminDecideWithdrawal(userId: string, id: string, status: 
 
 export async function adminUpdateChart(userId: string, targetUserId: string, mode: "profit" | "loss" | "flat" | "live", intensity: number) {
   await assertOwner(userId);
-  const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() } as never).eq("id", targetUserId);
+  const { error } = await supabaseAdmin.from("profiles").update({ chart_mode: mode, chart_intensity: intensity, chart_seed: Math.floor(Math.random() * 10000), updated_at: new Date().toISOString() }).eq("id", targetUserId);
   if (error) throw new Error(error.message);
   await writeActivity(targetUserId, "chart_control", 0, `Admin set chart to ${mode.toUpperCase()} intensity ${intensity}`, "completed");
   return { ok: true };
@@ -356,3 +358,61 @@ export async function closeUserPosition(userId: string, positionId: string, clos
 export function getAdminServerErrorMessage(error: unknown) {
   return asError(error, "Admin action failed");
 }
+
+// ── Platform-settings helpers ────────────────────────────────────────────────
+
+/** Read a single numeric platform setting with a typed fallback. */
+async function getPlatformNumeric(key: string, fallback: number): Promise<number> {
+  const { data } = await supabaseAdmin
+    .from("platform_settings")
+    .select("value")
+    .eq("key_name", key)
+    .maybeSingle();
+  if (!data) return fallback;
+  const raw = data.value;
+  const n = typeof raw === "number" ? raw : Number(String(raw).replace(/"/g, ""));
+  return isNaN(n) ? fallback : n;
+}
+
+/** Return all platform settings as { id, category, key_name, value (string), description } */
+export async function adminGetPlatformSettings(userId: string) {
+  await assertOwner(userId);
+  const { data, error } = await supabaseAdmin
+    .from("platform_settings")
+    .select("id, category, key_name, value, description")
+    .order("category")
+    .order("key_name");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row: any) => ({
+    ...row,
+    // Normalise JSONB value to a plain string for the frontend
+    value:
+      typeof row.value === "number"
+        ? String(row.value)
+        : typeof row.value === "string"
+        ? row.value.replace(/^"|"$/g, "")
+        : JSON.stringify(row.value),
+  }));
+}
+
+/** Upsert a single platform setting.  Numeric-looking strings are stored as JSON numbers. */
+export async function adminSavePlatformSetting(
+  userId: string,
+  keyName: string,
+  rawValue: string,
+  category?: string,
+) {
+  await assertOwner(userId);
+  const jsonValue = /^-?[\d.]+$/.test(rawValue.trim()) ? parseFloat(rawValue) : rawValue;
+  const row: any = { key_name: keyName, value: jsonValue, updated_at: new Date().toISOString() };
+  if (category) row.category = category;
+  const { error } = await supabaseAdmin
+    .from("platform_settings")
+    .upsert(row as never, { onConflict: "key_name" });
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+// Make deposit/withdrawal functions use dynamic rates from platform_settings
+// These are exported so the server fns above can call them too.
+export { getPlatformNumeric };

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -43,8 +44,10 @@ const FALLBACK_METHODS: PaymentMethod[] = [
   { id: "bankwire", method_key: "bankwire", method_name: "Bank Wire", identifier_label: "Account No.", recipient_name: "Frobex Treasury", identifier: "7823-4901-0056",      memo_note: "Include your Frobex user ID as the wire memo.", is_active: true },
 ];
 
-const GAS_FEE_PCT = 0.03;
-const EXPIRY_SECONDS = 2 * 60 * 60; // 2 hours
+// Static fallbacks — overridden by platform_settings at runtime
+const DEFAULT_GAS_FEE_PCT   = 0.03;
+const DEFAULT_MIN_DEPOSIT   = 50;
+const DEFAULT_EXPIRY_SECONDS = 2 * 60 * 60;
 
 // Step header
 function WizardSteps({ stage }: { stage: Stage }) {
@@ -99,8 +102,27 @@ function BuyBitcoinPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadedPath, setUploadedPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(EXPIRY_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(DEFAULT_EXPIRY_SECONDS);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load dynamic platform settings (public read, cached 5 min)
+  const { data: siteSettings } = useQuery<Record<string, string>>({
+    queryKey: ["platform_settings_public"],
+    queryFn: async () => {
+      const { data } = await supabase.from("platform_settings").select("key_name, value");
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => {
+        const v = r.value;
+        map[r.key_name] = typeof v === "number" ? String(v) : String(v).replace(/^"|"$/g, "");
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const GAS_FEE_PCT    = (parseFloat(siteSettings?.gas_fee_percent   ?? "") || DEFAULT_GAS_FEE_PCT * 100) / 100;
+  const MIN_DEPOSIT    =  parseFloat(siteSettings?.min_deposit_usd    ?? "") || DEFAULT_MIN_DEPOSIT;
+  const EXPIRY_SECONDS =  Math.floor((parseFloat(siteSettings?.payment_expiry_hours ?? "") || DEFAULT_EXPIRY_SECONDS / 3600) * 3600);
 
   // Load payment methods from DB (fallback to hardcoded if empty)
   useEffect(() => {
@@ -123,9 +145,10 @@ function BuyBitcoinPage() {
   // Countdown timer — only ticks once payment details are shown
   useEffect(() => {
     if (stage !== "details") return;
-    setSecondsLeft(EXPIRY_SECONDS);
+    setSecondsLeft(EXPIRY_SECONDS); // uses dynamic value once siteSettings loaded
     const id = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   const countdown = useMemo(() => {
@@ -141,7 +164,7 @@ function BuyBitcoinPage() {
 
   // When a method card is clicked → go to generating stage
   const pickMethod = (m: PaymentMethod) => {
-    if (base < 50) { toast.error("Enter a minimum amount of $50 first"); return; }
+    if (base < MIN_DEPOSIT) { toast.error(`Enter a minimum amount of $${MIN_DEPOSIT} first`); return; }
     setSelected(m);
     setStage("generating");
     // Auto-advance to details after 3s
