@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Safe fallback setup that uses Lovable Cloud environment variables if available,
-// or falls back safely to prevent white-screen crashes without needing a .env file.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ktnhfjblcoqnyxmrcuxf.supabase.co";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "public-anon-key-placeholder";
+// Pull the automatically managed keys directly from Vite's environment
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    persistSession: true,
+    storage: localStorage,
+    persistentSingleTab: true,
     autoRefreshToken: true,
   }
 });
