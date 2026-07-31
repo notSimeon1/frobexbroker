@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2, AlertTriangle, Headphones } from "lucide-react";
+import { CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2, TriangleAlert as AlertTriangle, Headphones } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
