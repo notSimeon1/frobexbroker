@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -46,16 +46,8 @@ function AuthPage() {
   const [country, setCountry] = useState("Australia");
   const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const formRef = useRef<HTMLDivElement>(null);
 
   const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-
-  const scrollToForm = (desiredTab?: "signin" | "signup") => {
-    if (desiredTab) setTab(desiredTab);
-    requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  };
 
   useEffect(() => {
     if (!loading && user) {
@@ -126,7 +118,7 @@ function AuthPage() {
           </div>
 
           {/* RIGHT: auth card */}
-          <div ref={formRef} className="w-full scroll-mt-24">
+          <div className="w-full">
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-hero shadow-glow">
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
@@ -137,7 +129,7 @@ function AuthPage() {
               </div>
             </div>
             <div className="w-full rounded-2xl border border-border bg-gradient-card p-6 shadow-elegant">
-              <Tabs value={tab} onValueChange={(v) => scrollToForm(v as any)}>
+              <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="signin">Sign in</TabsTrigger>
                   <TabsTrigger value="signup">Create account</TabsTrigger>
@@ -297,7 +289,7 @@ function AuthPage() {
         <div className="mx-auto max-w-7xl px-6 py-10 text-center">
           <h3 className="text-2xl font-bold">Ready to trade with an edge?</h3>
           <p className="mt-2 text-sm text-muted-foreground">Open your Frobex account today — no minimum deposit to explore the platform.</p>
-          <Button className="mt-5 bg-gradient-hero" onClick={() => scrollToForm("signup")}>Create free account</Button>
+          <Button className="mt-5 bg-gradient-hero" onClick={() => setTab("signup")}>Create free account</Button>
         </div>
       </section>
     </div>
