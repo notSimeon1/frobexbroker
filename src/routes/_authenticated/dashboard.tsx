@@ -56,11 +56,13 @@ function Dashboard() {
       return data;
     },
     enabled: !!user,
-    refetchInterval: 5000,
+    staleTime: 30000,
   });
 
-  const mode = (profile as any)?.account_mode as "demo" | "live" | undefined;
-  const balance = mode === "demo" ? Number((profile as any)?.demo_balance ?? 0) : Number((profile as any)?.live_balance ?? 0);
+  const mode = ((profile as any)?.account_mode as "demo" | "live") ?? "demo";
+  const balance = mode === "demo"
+    ? Number((profile as any)?.demo_balance ?? 10000)
+    : Number((profile as any)?.live_balance ?? 0);
   const kyc = (profile as any)?.kyc_status ?? "none";
   const name = (profile as any)?.full_name?.split(" ")[0] ?? "trader";
 

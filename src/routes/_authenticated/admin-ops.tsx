@@ -110,7 +110,7 @@ function AnnouncementsTab() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 10000,
+    staleTime: 60000,
   });
 
   const publish = async () => {
@@ -202,7 +202,7 @@ function SignalsTab() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 10000,
+    staleTime: 60000,
   });
 
   const publish = async () => {
@@ -382,7 +382,7 @@ function PaymentsTab() {
   const { data: methods, isLoading } = useQuery({
     queryKey: ["admin_payment_methods"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("admin_payment_methods").select("*").order("sort_order");
+      const { data, error } = await supabase.from("payment_methods").select("*").order("sort_order");
       if (error) throw error;
       return data ?? [];
     },
@@ -395,17 +395,20 @@ function PaymentsTab() {
   const save = async (m: any) => {
     setBusy(m.method_key);
     try {
-      const { error } = await supabase.rpc("admin_upsert_payment_method", {
-        _method_key: m.method_key,
-        _method_name: String(val(m, "method_name")),
-        _identifier_label: String(val(m, "identifier_label")),
-        _recipient_name: String(val(m, "recipient_name")),
-        _identifier: String(val(m, "identifier")),
-        _is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
-        _sort_order: Number(val(m, "sort_order")) || 0,
-      });
+      const { error } = await supabase.from("payment_methods").update({
+        label: String(val(m, "label")),
+        provider: String(val(m, "provider")),
+        account_name: String(val(m, "account_name")),
+        account_ref: String(val(m, "account_ref")),
+        wallet_address: String(val(m, "wallet_address")),
+        network: String(val(m, "network")),
+        instructions: String(val(m, "instructions")),
+        status: (draft[m.method_key]?.status ?? m.status) === "active" ? "active" : "inactive",
+        sort_order: Number(val(m, "sort_order")) || 0,
+        updated_at: new Date().toISOString(),
+      }).eq("id", m.id);
       if (error) throw error;
-      toast.success(`${val(m, "method_name")} details updated — live on user deposit pages`);
+      toast.success(`${val(m, "label")} updated — live on deposit pages`);
       setDraft((d) => ({ ...d, [m.method_key]: {} }));
       qc.invalidateQueries({ queryKey: ["admin_payment_methods"] });
       qc.invalidateQueries({ queryKey: ["payment_methods_active"] });
@@ -429,48 +432,60 @@ function PaymentsTab() {
 
       {isLoading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      ) : !methods?.length ? (
+        <Card className="p-6 text-center text-sm text-muted-foreground">No payment methods yet. Add one below.</Card>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
-          {(methods ?? []).map((m: any) => (
+          {methods.map((m: any) => (
             <Card key={m.id} className="space-y-3 p-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-primary">{m.method_key}</span>
-                  <Input className="h-8 w-40" value={val(m, "method_name")} onChange={(e) => set(m.method_key, "method_name", e.target.value)} />
+                  <Input className="h-8 w-40" value={val(m, "label")} onChange={(e) => set(m.method_key, "label", e.target.value)} />
                 </div>
-                <Badge className={(draft[m.method_key]?.is_active ?? m.is_active) ? "bg-success text-success-foreground" : ""} variant={(draft[m.method_key]?.is_active ?? m.is_active) ? "default" : "secondary"}>
-                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Active" : "Hidden"}
+                <Badge className={(draft[m.method_key]?.status ?? m.status) === "active" ? "bg-success text-success-foreground" : ""} variant={(draft[m.method_key]?.status ?? m.status) === "active" ? "default" : "secondary"}>
+                  {(draft[m.method_key]?.status ?? m.status) === "active" ? "Active" : "Hidden"}
                 </Badge>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs text-muted-foreground">Field label</label>
-                  <Input className="mt-1 h-9" value={val(m, "identifier_label")} onChange={(e) => set(m.method_key, "identifier_label", e.target.value)} />
+                  <label className="text-xs text-muted-foreground">Provider</label>
+                  <Input className="mt-1 h-9" value={val(m, "provider")} onChange={(e) => set(m.method_key, "provider", e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">Recipient / account name</label>
-                  <Input className="mt-1 h-9" value={val(m, "recipient_name")} onChange={(e) => set(m.method_key, "recipient_name", e.target.value)} />
+                  <label className="text-xs text-muted-foreground">Network</label>
+                  <Input className="mt-1 h-9" value={val(m, "network")} onChange={(e) => set(m.method_key, "network", e.target.value)} />
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs text-muted-foreground">Account name</label>
+                  <Input className="mt-1 h-9" value={val(m, "account_name")} onChange={(e) => set(m.method_key, "account_name", e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Account reference</label>
+                  <Input className="mt-1 h-9" value={val(m, "account_ref")} onChange={(e) => set(m.method_key, "account_ref", e.target.value)} />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-muted-foreground">Account detail / wallet address / tag</label>
+                <label className="text-xs text-muted-foreground">Wallet address</label>
                 <div className="mt-1 flex gap-2">
-                  <Input className="h-9 font-mono text-xs" value={val(m, "identifier")} onChange={(e) => set(m.method_key, "identifier", e.target.value)} />
-                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(String(val(m, "identifier"))); toast.success("Copied"); }}>Copy</Button>
+                  <Input className="h-9 font-mono text-xs" value={val(m, "wallet_address")} onChange={(e) => set(m.method_key, "wallet_address", e.target.value)} />
+                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(String(val(m, "wallet_address"))); toast.success("Copied"); }}>Copy</Button>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border bg-surface p-3 text-xs">
-                <div className="mb-1 font-semibold text-muted-foreground">User-side preview</div>
-                <div className="flex justify-between"><span className="text-muted-foreground">{val(m, "identifier_label")}</span><span className="font-mono font-semibold">{val(m, "identifier") || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Recipient</span><span className="font-semibold">{val(m, "recipient_name") || "—"}</span></div>
+              <div>
+                <label className="text-xs text-muted-foreground">Instructions</label>
+                <Textarea className="mt-1 text-sm" rows={2} value={val(m, "instructions")} onChange={(e) => set(m.method_key, "instructions", e.target.value)} />
               </div>
 
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => set(m.method_key, "is_active", !(draft[m.method_key]?.is_active ?? m.is_active))}>
-                  {(draft[m.method_key]?.is_active ?? m.is_active) ? "Set hidden" : "Set active"}
+                <Button size="sm" variant="outline" onClick={() => set(m.method_key, "status", (draft[m.method_key]?.status ?? m.status) === "active" ? "inactive" : "active")}>
+                  {(draft[m.method_key]?.status ?? m.status) === "active" ? "Set hidden" : "Set active"}
                 </Button>
                 <Button size="sm" className="ml-auto bg-gradient-hero" disabled={busy === m.method_key} onClick={() => save(m)}>
                   {busy === m.method_key ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null} Save changes
