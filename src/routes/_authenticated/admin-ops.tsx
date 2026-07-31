@@ -485,36 +485,224 @@ function PaymentsTab() {
 }
 
 function SettingsTab() {
-  const { data: profile } = useQuery({
-    queryKey: ["admin_profile_settings"],
+  const qc = useQueryClient();
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["admin_platform_settings"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("ai_trading_enabled, signals_lifetime, preferred_currency").limit(1).maybeSingle();
-      return data;
+      const { data, error } = await supabase.from("platform_settings").select("*").order("category, key_name");
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
+  const { data: bots } = useQuery({
+    queryKey: ["admin_ops_bots_settings"],
+    queryFn: async () => {
+      const { data } = await supabase.from("trading_bots").select("*").order("sort_order");
+      return data ?? [];
+    },
+  });
+
+  const { data: copyTiers } = useQuery({
+    queryKey: ["admin_copy_tiers_settings"],
+    queryFn: async () => {
+      const { data } = await supabase.from("copy_trading_tiers").select("*").order("sort_order");
+      return data ?? [];
+    },
+  });
+
+  const saveSetting = async (id: string, key: string) => {
+    const newVal = editValues[key];
+    if (newVal === undefined) return;
+    setBusyKeys((s) => new Set(s).add(key));
+    try {
+      let parsedVal: any = newVal;
+      if (!isNaN(Number(newVal)) && newVal.trim() !== "") parsedVal = Number(newVal);
+
+      const { error } = await supabase.from("platform_settings").update({ value: parsedVal, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+      toast.success("Setting updated");
+      setEditValues((prev) => { const next = { ...prev }; delete next[key]; return next; });
+      qc.invalidateQueries({ queryKey: ["admin_platform_settings"] });
+    } catch (err: any) {
+      toast.error(err.message ?? "Update failed");
+    } finally {
+      setBusyKeys((s) => { const next = new Set(s); next.delete(key); return next; });
+    }
+  };
+
+  const saveBotField = async (botId: string, field: string, value: string) => {
+    const key = `bot_${botId}_${field}`;
+    setBusyKeys((s) => new Set(s).add(key));
+    try {
+      const numVal = field === "name" || field === "payout_type" ? value : Number(value);
+      const { error } = await supabase.from("trading_bots").update({ [field]: numVal }).eq("id", botId);
+      if (error) throw error;
+      toast.success("Bot updated");
+      setEditValues((prev) => { const next = { ...prev }; delete next[key]; return next; });
+      qc.invalidateQueries({ queryKey: ["admin_ops_bots_settings"] });
+      qc.invalidateQueries({ queryKey: ["admin_ops_bots"] });
+    } catch (err: any) {
+      toast.error(err.message ?? "Update failed");
+    } finally {
+      setBusyKeys((s) => { const next = new Set(s); next.delete(key); return next; });
+    }
+  };
+
+  const saveCopyTierField = async (tierId: string, field: string, value: string) => {
+    const key = `copy_${tierId}_${field}`;
+    setBusyKeys((s) => new Set(s).add(key));
+    try {
+      const numVal = field === "tier_name" || field === "strategist_name" ? value : Number(value);
+      const { error } = await supabase.from("copy_trading_tiers").update({ [field]: numVal }).eq("id", tierId);
+      if (error) throw error;
+      toast.success("Copy tier updated");
+      setEditValues((prev) => { const next = { ...prev }; delete next[key]; return next; });
+      qc.invalidateQueries({ queryKey: ["admin_copy_tiers_settings"] });
+    } catch (err: any) {
+      toast.error(err.message ?? "Update failed");
+    } finally {
+      setBusyKeys((s) => { const next = new Set(s); next.delete(key); return next; });
+    }
+  };
+
+  const grouped = (settings ?? []).reduce((acc: Record<string, any[]>, s: any) => {
+    (acc[s.category] ??= []).push(s);
+    return acc;
+  }, {});
+
+  if (isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
   return (
-    <Card className="space-y-4 p-6">
-      <h2 className="flex items-center gap-2 text-lg font-semibold"><Settings className="h-4 w-4 text-primary" /> Platform Settings</h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">AI Trading</div>
-          <div className="mt-1 font-semibold">{profile?.ai_trading_enabled ? "Enabled" : "Disabled"}</div>
+    <div className="space-y-5">
+      <Card className="p-5">
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold"><Settings className="h-4 w-4 text-primary" /> Platform Settings — All Editable Figures</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Edit any money amount, percentage, duration, or text value. Changes take effect immediately across the platform.</p>
+
+        {Object.entries(grouped).map(([category, items]) => (
+          <div key={category} className="mb-5">
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">{category}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((s: any) => {
+                const key = `setting_${s.id}`;
+                const currentVal = editValues[key] ?? String(s.value);
+                return (
+                  <div key={s.id} className="rounded-lg border border-border bg-surface p-3">
+                    <div className="text-xs font-medium text-muted-foreground">{s.description ?? s.key_name}</div>
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        className="h-8 text-sm"
+                        value={currentVal}
+                        onChange={(e) => setEditValues({ ...editValues, [key]: e.target.value })}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busyKeys.has(key) || editValues[key] === undefined}
+                        onClick={() => saveSetting(s.id, key)}
+                      >
+                        {busyKeys.has(key) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Bot className="h-4 w-4 text-primary" /> Trading Bot Configuration</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Edit capital requirements, ROI ranges, durations, hourly payouts, and status for each bot tier.</p>
+        <div className="space-y-3">
+          {bots?.map((b: any) => (
+            <div key={b.id} className="rounded-lg border border-border bg-surface p-4">
+              <div className="mb-3 font-semibold">{b.name} <span className="ml-1 text-xs text-muted-foreground">({b.tier_key})</span></div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                <BotField label="Capital ($)" botId={b.id} field="capital_required" value={b.capital_required} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <BotField label="Min ROI (%)" botId={b.id} field="min_roi" value={b.min_roi} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <BotField label="Max ROI (%)" botId={b.id} field="max_roi" value={b.max_roi} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <BotField label="Duration (days)" botId={b.id} field="duration_days" value={b.duration_days} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <BotField label="Hourly Payout ($)" botId={b.id} field="hourly_payout" value={b.hourly_payout} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <BotField label="Win Rate (%)" botId={b.id} field="win_rate" value={b.win_rate} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveBotField} type="number" />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Payout Type</Label>
+                  <Select defaultValue={b.payout_type ?? "daily"} onValueChange={(v) => saveBotField(b.id, "payout_type", v)}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="hourly">Hourly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Select defaultValue={b.status} onValueChange={(v) => saveBotField(b.id, "status", v)}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Signals Access</div>
-          <div className="mt-1 font-semibold">{profile?.signals_lifetime ? "Lifetime" : "Trial"}</div>
+      </Card>
+
+      <Card className="p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Layers className="h-4 w-4 text-primary" /> Copy Trading Tier Configuration</h2>
+        <p className="mb-4 text-sm text-muted-foreground">Edit capital requirements, ROI ranges, and win rates for each copy trading tier.</p>
+        <div className="space-y-3">
+          {copyTiers?.map((t: any) => (
+            <div key={t.id} className="rounded-lg border border-border bg-surface p-4">
+              <div className="mb-3 font-semibold">{t.tier_name} <span className="ml-1 text-xs text-muted-foreground">({t.tier_key})</span></div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                <BotField label="Required Capital ($)" botId={t.id} field="required_capital" value={t.required_capital} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveCopyTierField} type="number" prefix="copy_" />
+                <BotField label="Min Monthly ROI (%)" botId={t.id} field="monthly_roi_min" value={t.monthly_roi_min} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveCopyTierField} type="number" prefix="copy_" />
+                <BotField label="Max Monthly ROI (%)" botId={t.id} field="monthly_roi_max" value={t.monthly_roi_max} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveCopyTierField} type="number" prefix="copy_" />
+                <BotField label="Win Rate (%)" botId={t.id} field="win_rate" value={t.win_rate} editValues={editValues} setEditValues={setEditValues} busyKeys={busyKeys} onSave={saveCopyTierField} type="number" prefix="copy_" />
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Preferred Currency</div>
-          <div className="mt-1 font-semibold">{profile?.preferred_currency ?? "USD"}</div>
-        </div>
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-xs text-muted-foreground">Owner Email</div>
-          <div className="mt-1 font-semibold">{OWNER_EMAIL}</div>
-        </div>
+      </Card>
+    </div>
+  );
+}
+
+function BotField({ label, botId, field, value, editValues, setEditValues, busyKeys, onSave, type, prefix = "bot_" }: {
+  label: string; botId: string; field: string; value: any; editValues: Record<string, string>;
+  setEditValues: React.Dispatch<React.SetStateAction<Record<string, string>>>; busyKeys: Set<string>;
+  onSave: (id: string, field: string, value: string) => void; type?: string; prefix?: string;
+}) {
+  const key = `${prefix}${botId}_${field}`;
+  const currentVal = editValues[key] ?? String(value ?? "");
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex gap-1.5">
+        <Input
+          className="h-8 text-sm"
+          type={type === "number" ? "number" : "text"}
+          value={currentVal}
+          onChange={(e) => setEditValues({ ...editValues, [key]: e.target.value })}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busyKeys.has(key) || editValues[key] === undefined}
+          onClick={() => onSave(botId, field, editValues[key] ?? currentVal)}
+        >
+          {busyKeys.has(key) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        </Button>
       </div>
-    </Card>
+    </div>
   );
 }
 

