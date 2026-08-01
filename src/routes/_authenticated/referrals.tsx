@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -75,7 +76,12 @@ function ReferralsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <div className="text-xs text-muted-foreground">Your referral code</div>
-            <div className="mt-1 text-2xl font-bold tracking-widest">{code || "—"}</div>
+            <div className="mt-1 flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+              <span className="flex-1 truncate text-xl font-bold tracking-widest">{code || "—"}</span>
+              <Button size="sm" variant="ghost" onClick={() => copy(code, "Code")} aria-label="Copy referral code">
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="rounded-lg bg-surface p-3">
             <div className="text-xs text-muted-foreground">Total earned</div>
@@ -83,9 +89,10 @@ function ReferralsPage() {
           </div>
         </div>
         <div className="mt-4">
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-            <code className="flex-1 truncate text-xs">{link}</code>
-            <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(link); toast.success("Link copied"); }}>
+          <div className="text-xs text-muted-foreground">Your referral link</div>
+          <div className="mt-1 flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+            <code className="flex-1 truncate text-xs">{link || "—"}</code>
+            <Button size="sm" variant="ghost" onClick={() => copy(link, "Link")} aria-label="Copy referral link">
               <Copy className="h-4 w-4" />
             </Button>
           </div>
