@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck, Clock, Settings2, Wallet } from "lucide-react";
+import { Loader as Loader2, Shield, Check, X, TrendingUp, TrendingDown, Minus, Save, FileText, Newspaper, Ban, Bot, Users, Layers, Megaphone, Radio, Activity, DollarSign, ChartBar as BarChart3, Cpu, Headphones, Send, KeyRound, ScrollText, UserCog, Crown, ShieldCheck, Clock, Settings2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -52,22 +52,23 @@ function AdminPage() {
       setIsAdmin(true);
       return;
     }
-    // Check user_roles table for admin role
-    supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (data?.role === "super_admin" || data?.role === "admin") {
           setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-          toast.error("Admin only");
-          navigate({ to: "/dashboard" });
+          return;
         }
-      });
+      } catch (e) {
+        console.warn("admin check failed", e);
+      }
+      setIsAdmin(false);
+      navigate({ to: "/dashboard" });
+    })();
   }, [user, navigate]);
 
   const overviewQuery = useQuery({
@@ -323,10 +324,10 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
-      return new Set((data ?? []).map((r: any) => r.user_id as string));
+      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
+      return new Set((data ?? []).map((r: any) => r.id as string));
     },
-    refetchInterval: 8000,
+    staleTime: 30000,
   });
   const adminIds = rolesQuery.data ?? new Set<string>();
   const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
@@ -1286,12 +1287,12 @@ function AdminRolesTab({ users, loading, refetch }: { users?: any[]; loading: bo
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids_full"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("user_id,role,created_at").eq("role", "admin");
+      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
       return data ?? [];
     },
-    refetchInterval: 8000,
+    staleTime: 30000,
   });
-  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.user_id as string));
+  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.id as string));
   const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
 
   const filtered = useMemo(() => {

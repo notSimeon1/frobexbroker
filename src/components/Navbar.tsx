@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useAccountMode } from "@/lib/account-mode-context";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, ChartLine as LineChart, Store, ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles, Headphones, Megaphone, Mail, User, ChevronDown, Circle as HelpCircle, Gift, Play, ShoppingCart, SquareMinus as MinusSquare, Zap, Cpu, Layers, Bitcoin, Wallet } from "lucide-react";
@@ -14,35 +15,18 @@ const OWNER_EMAIL = "simonosawaru255@gmail.com";
 
 export function Navbar() {
   const { user, signOut } = useAuth();
+  const { mode, balance } = useAccountMode();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [balance, setBalance] = useState<number>(0);
 
   useEffect(() => {
-    if (!user) { setIsAdmin(false); setBalance(0); return; }
-    if (user.email?.toLowerCase() === OWNER_EMAIL) { setIsAdmin(true); }
-    supabase.from("profiles").select("role, account_balance, available_cash, account_mode, demo_balance, live_balance").eq("id", user.id).maybeSingle()
+    if (!user) { setIsAdmin(false); return; }
+    if (user.email?.toLowerCase() === OWNER_EMAIL) { setIsAdmin(true); return; }
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
       .then(({ data }) => {
-        if (data) {
-          setIsAdmin(data.role === "super_admin" || data.role === "admin" || user.email?.toLowerCase() === OWNER_EMAIL);
-          const mode = data.account_mode ?? "demo";
-          setBalance(mode === "demo" ? Number(data.demo_balance ?? 10000) : Number(data.live_balance ?? 0));
-        }
+        setIsAdmin(data?.role === "super_admin" || data?.role === "admin" || user.email?.toLowerCase() === OWNER_EMAIL);
       });
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase.channel(`profile_balance_${user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => {
-        const p = payload.new;
-        if (!p) return;
-        const mode = p.account_mode ?? "demo";
-        setBalance(mode === "demo" ? Number(p.demo_balance ?? 10000) : Number(p.live_balance ?? 0));
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const sections: { title: string; items: NavItem[] }[] = [
@@ -110,6 +94,7 @@ export function Navbar() {
               <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1">
                 <Wallet className="h-3.5 w-3.5 text-primary" />
                 <span className="text-sm font-bold tabular-nums">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                {mode === "demo" && <Badge className="ml-1 bg-amber-500/20 text-amber-400 border-amber-500/40 text-[9px] px-1.5 py-0">DEMO</Badge>}
               </div>
               <NotificationBell />
               <DropdownMenu>

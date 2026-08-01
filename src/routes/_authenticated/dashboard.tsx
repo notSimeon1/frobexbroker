@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { useAccountMode } from "@/lib/account-mode-context";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const FILTERS: { id: FilterId; label: string }[] = [
 
 function Dashboard() {
   const { user } = useAuth();
+  const { mode, balance, switchMode } = useAccountMode();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<FilterId>("hot");
   const [market, setMarket] = useState<"spot" | "futures">("spot");
@@ -59,18 +61,12 @@ function Dashboard() {
     staleTime: 30000,
   });
 
-  const mode = ((profile as any)?.account_mode as "demo" | "live") ?? "demo";
-  const balance = mode === "demo"
-    ? Number((profile as any)?.demo_balance ?? 10000)
-    : Number((profile as any)?.live_balance ?? 0);
   const kyc = (profile as any)?.kyc_status ?? "none";
   const name = (profile as any)?.full_name?.split(" ")[0] ?? "trader";
 
   const toggleMode = async () => {
-    if (!user || !profile) return;
     const next = mode === "live" ? "demo" : "live";
-    const { error } = await supabase.from("profiles").update({ account_mode: next }).eq("id", user.id);
-    if (error) toast.error(error.message); else { toast.success(`Switched to ${next.toUpperCase()}`); qc.invalidateQueries({ queryKey: ["profile"] }); }
+    await switchMode(next);
   };
 
   const toggleFav = (s: string) => {

@@ -529,44 +529,182 @@ function SettingsTab() {
 }
 
 function BotsTab() {
+  const qc = useQueryClient();
   const { data: bots, isLoading } = useQuery({
     queryKey: ["admin_ops_bots"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("trading_bots").select("*").order("capital_required", { ascending: true });
+      const { data, error } = await supabase.from("trading_bots").select("*").order("sort_order");
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 30000,
   });
 
-  const toggleBot = async (id: string, status: string) => {
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const val = (b: any, k: string) => draft[b.id]?.[k] ?? b[k] ?? "";
+  const set = (id: string, k: string, v: any) => setDraft((d) => ({ ...d, [id]: { ...(d[id] ?? {}), [k]: v } }));
+
+  const save = async (b: any) => {
+    setBusy(b.id);
     try {
-      const { error } = await supabase.from("trading_bots").update({ status }).eq("id", id);
+      const { error } = await supabase.from("trading_bots").update({
+        name: String(val(b, "name")),
+        capital_required: Number(val(b, "capital_required")),
+        min_roi: Number(val(b, "min_roi")),
+        max_roi: Number(val(b, "max_roi")),
+        win_rate: Number(val(b, "win_rate")),
+        duration_days: Number(val(b, "duration_days")),
+        hourly_payout: Number(val(b, "hourly_payout")) || 0,
+        daily_payout: Number(val(b, "daily_payout")) || 0,
+        status: String(val(b, "status")),
+        is_active: Boolean(draft[b.id]?.is_active ?? b.is_active),
+        updated_at: new Date().toISOString(),
+      }).eq("id", b.id);
       if (error) throw error;
       toast.success("Bot updated");
+      setDraft((d) => ({ ...d, [b.id]: {} }));
+      qc.invalidateQueries({ queryKey: ["admin_ops_bots"] });
+      qc.invalidateQueries({ queryKey: ["trading_bots"] });
     } catch (err: any) {
       toast.error(err.message ?? "Update failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Bot className="h-4 w-4 text-primary" /> Trading Bots ({bots?.length ?? 0})</h2>
+        {isLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div> :
+        !bots?.length ? <p className="text-sm text-muted-foreground">No bots configured.</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left uppercase text-muted-foreground">
+                <tr>
+                  <th className="pb-2 pr-2">Name</th>
+                  <th className="pb-2 pr-2">Price</th>
+                  <th className="pb-2 pr-2">ROI%</th>
+                  <th className="pb-2 pr-2">Win%</th>
+                  <th className="pb-2 pr-2">Days</th>
+                  <th className="pb-2 pr-2">$/hr</th>
+                  <th className="pb-2 pr-2">$/day</th>
+                  <th className="pb-2 pr-2">Status</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {bots.map((b: any) => (
+                  <tr key={b.id} className="border-t border-border">
+                    <td className="py-2 pr-2"><Input className="h-8 w-40" value={val(b, "name")} onChange={(e) => set(b.id, "name", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-20" type="number" value={val(b, "capital_required")} onChange={(e) => set(b.id, "capital_required", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(b, "min_roi")} onChange={(e) => set(b.id, "min_roi", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(b, "win_rate")} onChange={(e) => set(b.id, "win_rate", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-14" type="number" value={val(b, "duration_days")} onChange={(e) => set(b.id, "duration_days", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(b, "hourly_payout")} onChange={(e) => set(b.id, "hourly_payout", e.target.value)} /></td>
+                    <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(b, "daily_payout")} onChange={(e) => set(b.id, "daily_payout", e.target.value)} /></td>
+                    <td className="py-2 pr-2">
+                      <Select value={String(val(b, "status"))} onValueChange={(v) => set(b.id, "status", v)}>
+                        <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2"><Button size="sm" disabled={busy === b.id} onClick={() => save(b)}>{busy === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}</Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <CopyTiersTab />
+    </div>
+  );
+}
+
+function CopyTiersTab() {
+  const qc = useQueryClient();
+  const { data: tiers, isLoading } = useQuery({
+    queryKey: ["admin_ops_copy_tiers"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("copy_trading_tiers").select("*").order("sort_order");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 30000,
+  });
+
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const val = (t: any, k: string) => draft[t.id]?.[k] ?? t[k] ?? "";
+  const set = (id: string, k: string, v: any) => setDraft((d) => ({ ...d, [id]: { ...(d[id] ?? {}), [k]: v } }));
+
+  const save = async (t: any) => {
+    setBusy(t.id);
+    try {
+      const { error } = await supabase.from("copy_trading_tiers").update({
+        tier_name: String(val(t, "tier_name")),
+        strategist_name: String(val(t, "strategist_name")),
+        required_capital: Number(val(t, "required_capital")),
+        win_rate: Number(val(t, "win_rate")),
+        monthly_roi_min: Number(val(t, "monthly_roi_min")),
+        monthly_roi_max: Number(val(t, "monthly_roi_max")),
+        is_active: Boolean(draft[t.id]?.is_active ?? t.is_active),
+        updated_at: new Date().toISOString(),
+      }).eq("id", t.id);
+      if (error) throw error;
+      toast.success("Tier updated");
+      setDraft((d) => ({ ...d, [t.id]: {} }));
+      qc.invalidateQueries({ queryKey: ["admin_ops_copy_tiers"] });
+      qc.invalidateQueries({ queryKey: ["copy_trading_tiers"] });
+    } catch (err: any) {
+      toast.error(err.message ?? "Update failed");
+    } finally {
+      setBusy(null);
     }
   };
 
   return (
     <Card className="p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Bot className="h-4 w-4 text-primary" /> Trading Bot Tiers</h2>
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Users className="h-4 w-4 text-primary" /> Copy Trading Tiers ({tiers?.length ?? 0})</h2>
       {isLoading ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-      !bots?.length ? <p className="text-sm text-muted-foreground">No bot tiers configured.</p> : (
-        <div className="space-y-2">
-          {bots.map((b: any) => (
-            <div key={b.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-              <div>
-                <span className="font-semibold">{b.name}</span>
-                <span className="ml-2 text-muted-foreground">${Number(b.capital_required).toLocaleString()}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{b.min_roi}-{b.max_roi}% ROI</span>
-              </div>
-              <label className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Status</span>
-                <Switch checked={b.status === "active"} onCheckedChange={(v) => toggleBot(b.id, v ? "active" : "inactive")} />
-              </label>
-            </div>
-          ))}
+      !tiers?.length ? <p className="text-sm text-muted-foreground">No tiers configured.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left uppercase text-muted-foreground">
+              <tr>
+                <th className="pb-2 pr-2">Tier</th>
+                <th className="pb-2 pr-2">Strategist</th>
+                <th className="pb-2 pr-2">Price</th>
+                <th className="pb-2 pr-2">Win%</th>
+                <th className="pb-2 pr-2">ROI min</th>
+                <th className="pb-2 pr-2">ROI max</th>
+                <th className="pb-2 pr-2">Active</th>
+                <th className="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tiers.map((t: any) => (
+                <tr key={t.id} className="border-t border-border">
+                  <td className="py-2 pr-2"><Input className="h-8 w-24" value={val(t, "tier_name")} onChange={(e) => set(t.id, "tier_name", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Input className="h-8 w-36" value={val(t, "strategist_name")} onChange={(e) => set(t.id, "strategist_name", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Input className="h-8 w-20" type="number" value={val(t, "required_capital")} onChange={(e) => set(t.id, "required_capital", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(t, "win_rate")} onChange={(e) => set(t.id, "win_rate", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(t, "monthly_roi_min")} onChange={(e) => set(t.id, "monthly_roi_min", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Input className="h-8 w-16" type="number" value={val(t, "monthly_roi_max")} onChange={(e) => set(t.id, "monthly_roi_max", e.target.value)} /></td>
+                  <td className="py-2 pr-2"><Switch checked={draft[t.id]?.is_active ?? t.is_active} onCheckedChange={(v) => set(t.id, "is_active", v)} /></td>
+                  <td className="py-2"><Button size="sm" disabled={busy === t.id} onClick={() => save(t)}>{busy === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth-context";
+import { useAccountMode } from "@/lib/account-mode-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ export const Route = createFileRoute("/_authenticated/copy-trading")({
 
 function CopyTradingPage() {
   const { user } = useAuth();
+  const { mode, balance } = useAccountMode();
   const qc = useQueryClient();
 
   const { data: tiers } = useQuery({
@@ -33,16 +34,6 @@ function CopyTradingPage() {
       if (error) throw error;
       return data ?? [];
     },
-  });
-
-  const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("account_balance").eq("id", user!.id).maybeSingle();
-      return data;
-    },
-    enabled: !!user,
-    refetchInterval: 5000,
   });
 
   const { data: allocations } = useQuery({
@@ -56,10 +47,8 @@ function CopyTradingPage() {
       return data ?? [];
     },
     enabled: !!user,
-    refetchInterval: 10000,
+    staleTime: 15000,
   });
-
-  const balance = Number(profile?.account_balance ?? 0);
 
   return (
     <div className="space-y-6">
@@ -80,7 +69,10 @@ function CopyTradingPage() {
       <Card className="border-primary/30 bg-primary/5 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-muted-foreground">Available Balance</div>
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              {mode === "demo" && <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/40 text-[9px]">DEMO</Badge>}
+              Available Balance
+            </div>
             <div className="text-2xl font-bold tabular-nums">${balance.toFixed(2)}</div>
           </div>
           <Button asChild variant="outline" size="sm">
@@ -138,7 +130,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
     }
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("activate_copy_trading" as never, {
+      const { error } = await supabase.rpc("subscribe_copy_trader" as never, {
         _tier_id: tier.id,
         _allocated_amount: usd,
       } as never);
