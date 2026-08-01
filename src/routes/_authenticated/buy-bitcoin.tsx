@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Bitcoin, Copy, Loader2, ArrowLeft, CheckCircle2, Upload, CloudUpload } from "lucide-react";
+import { Bitcoin, Copy, Loader as Loader2, ArrowLeft, CircleCheck as CheckCircle2, Upload, CloudUpload } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/buy-bitcoin")({
   component: BuyBitcoinPage,
@@ -224,7 +224,7 @@ function BuyBitcoinPage() {
         status: "pending",
       });
 
-      toast.success("Deposit request submitted — admin will verify and credit your wallet");
+      toast.success("Deposit request submitted — you will be notified once verified");
       // Reset
       setStage("select");
       setSelected(null);
@@ -397,7 +397,7 @@ function BuyBitcoinPage() {
               )}
               {!selected.memo_note && (
                 <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-xs text-muted-foreground">
-                  📝 Include your Frobex account email as the payment memo/note so admin can match your deposit instantly.
+                  📝 Include your Frobex account email as the payment memo/note so we can match your deposit instantly.
                 </div>
               )}
             </div>
@@ -409,7 +409,7 @@ function BuyBitcoinPage() {
                   Payment receipt <span className="text-red-500">*</span>
                 </Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Upload a screenshot of your payment. Required before submission — admin will verify and credit your wallet.
+                  Upload a screenshot of your payment. Required before submission — we will verify and credit your wallet.
                 </p>
               </div>
 

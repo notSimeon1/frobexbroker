@@ -17,12 +17,32 @@ export function Navbar() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [balance, setBalance] = useState<number>(0);
 
   useEffect(() => {
-    if (!user) { setIsAdmin(false); return; }
-    if (user.email?.toLowerCase() === OWNER_EMAIL) { setIsAdmin(true); return; }
-    supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle()
-      .then(({ data }) => setIsAdmin(!!data));
+    if (!user) { setIsAdmin(false); setBalance(0); return; }
+    if (user.email?.toLowerCase() === OWNER_EMAIL) { setIsAdmin(true); }
+    supabase.from("profiles").select("role, account_balance, available_cash, account_mode, demo_balance, live_balance").eq("id", user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setIsAdmin(data.role === "super_admin" || data.role === "admin" || user.email?.toLowerCase() === OWNER_EMAIL);
+          const mode = data.account_mode ?? "demo";
+          setBalance(mode === "demo" ? Number(data.demo_balance ?? 10000) : Number(data.live_balance ?? 0));
+        }
+      });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel(`profile_balance_${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, (payload: any) => {
+        const p = payload.new;
+        if (!p) return;
+        const mode = p.account_mode ?? "demo";
+        setBalance(mode === "demo" ? Number(p.demo_balance ?? 10000) : Number(p.live_balance ?? 0));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const sections: { title: string; items: NavItem[] }[] = [
@@ -84,9 +104,13 @@ export function Navbar() {
             </Link>
           </div>
 
-          {/* Top-right — notif bell + user dropdown (preserved) */}
+          {/* Top-right — balance + notif bell + user dropdown */}
           {user ? (
             <div className="flex items-center gap-1">
+              <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1">
+                <Wallet className="h-3.5 w-3.5 text-primary" />
+                <span className="text-sm font-bold tabular-nums">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
               <NotificationBell />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

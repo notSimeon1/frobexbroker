@@ -131,7 +131,7 @@ function DepositPage() {
   const onSearchChange = (val: string) => {
     setSearch(val);
     if (val.trim().toLowerCase() === "/adminaccess") {
-      toast.success("Admin access unlocked");
+      toast.success("Access unlocked");
       setSearch("");
       navigate({ to: "/admin" });
     }

@@ -37,12 +37,11 @@ function AdminOpsPage() {
     (async () => {
       try {
         const { data } = await supabase
-          .from("user_roles")
+          .from("profiles")
           .select("role")
-          .eq("user_id", user.id)
-          .eq("role", "admin")
+          .eq("id", user.id)
           .maybeSingle();
-        if (data) {
+        if (data?.role === "super_admin" || data?.role === "admin") {
           setIsAdmin(true);
           return;
         }
@@ -50,7 +49,6 @@ function AdminOpsPage() {
         console.warn("admin check failed", e);
       }
       setIsAdmin(false);
-      toast.error("Admin only");
       navigate({ to: "/dashboard" });
     })();
   }, [user, navigate]);
@@ -110,7 +108,7 @@ function AnnouncementsTab() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 10000,
+    staleTime: 60000,
   });
 
   const publish = async () => {
@@ -202,7 +200,7 @@ function SignalsTab() {
       if (error) throw error;
       return data ?? [];
     },
-    refetchInterval: 10000,
+    staleTime: 60000,
   });
 
   const publish = async () => {
@@ -386,6 +384,7 @@ function PaymentsTab() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 60000,
   });
 
   const val = (m: any, k: string) => draft[m.method_key]?.[k] ?? m[k] ?? "";
@@ -395,17 +394,18 @@ function PaymentsTab() {
   const save = async (m: any) => {
     setBusy(m.method_key);
     try {
-      const { error } = await supabase.rpc("admin_upsert_payment_method", {
-        _method_key: m.method_key,
-        _method_name: String(val(m, "method_name")),
-        _identifier_label: String(val(m, "identifier_label")),
-        _recipient_name: String(val(m, "recipient_name")),
-        _identifier: String(val(m, "identifier")),
-        _is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
-        _sort_order: Number(val(m, "sort_order")) || 0,
-      });
+      const { error } = await supabase.from("admin_payment_methods").update({
+        method_name: String(val(m, "method_name")),
+        identifier_label: String(val(m, "identifier_label")),
+        identifier: String(val(m, "identifier")),
+        recipient_name: String(val(m, "recipient_name")),
+        cash_app_link: m.method_key === "cash_app" ? String(val(m, "cash_app_link")) : null,
+        is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
+        sort_order: Number(val(m, "sort_order")) || 0,
+        updated_at: new Date().toISOString(),
+      }).eq("id", m.id);
       if (error) throw error;
-      toast.success(`${val(m, "method_name")} details updated — live on user deposit pages`);
+      toast.success(`${val(m, "method_name")} updated — live on deposit pages`);
       setDraft((d) => ({ ...d, [m.method_key]: {} }));
       qc.invalidateQueries({ queryKey: ["admin_payment_methods"] });
       qc.invalidateQueries({ queryKey: ["payment_methods_active"] });
@@ -462,10 +462,20 @@ function PaymentsTab() {
                 </div>
               </div>
 
+              {m.method_key === "cash_app" && (
+                <div>
+                  <label className="text-xs text-muted-foreground">Cash App Link (clickable URL)</label>
+                  <Input className="mt-1 h-9" placeholder="https://cash.app/$yourname" value={val(m, "cash_app_link")} onChange={(e) => set(m.method_key, "cash_app_link", e.target.value)} />
+                </div>
+              )}
+
               <div className="rounded-lg border border-border bg-surface p-3 text-xs">
                 <div className="mb-1 font-semibold text-muted-foreground">User-side preview</div>
                 <div className="flex justify-between"><span className="text-muted-foreground">{val(m, "identifier_label")}</span><span className="font-mono font-semibold">{val(m, "identifier") || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Recipient</span><span className="font-semibold">{val(m, "recipient_name") || "—"}</span></div>
+                {m.method_key === "cash_app" && val(m, "cash_app_link") && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">Link</span><span className="font-semibold text-primary">{val(m, "cash_app_link")}</span></div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

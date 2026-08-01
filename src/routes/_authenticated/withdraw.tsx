@@ -84,7 +84,7 @@ function WithdrawPage() {
         });
       }
 
-      toast.success("Withdrawal request submitted — redirecting to customer service");
+      toast.success("Withdrawal request submitted");
       setAmount(""); setWallet(""); refetch();
       navigate({ to: "/support" });
     } catch (err: any) {
