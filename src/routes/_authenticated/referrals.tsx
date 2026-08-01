@@ -12,6 +12,13 @@ export const Route = createFileRoute("/_authenticated/referrals")({
   component: ReferralsPage,
 });
 
+function randomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
+  return `FRB-${out}`;
+}
+
 function ReferralsPage() {
   const { user } = useAuth();
 
@@ -33,9 +40,24 @@ function ReferralsPage() {
     enabled: !!user,
   });
 
-  const code = profile?.referral_code ?? "";
-  const link = typeof window !== "undefined" && code ? `${window.location.origin}/auth?ref=${code}` : "";
-  const total = (earnings ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0);
+  const [fallbackCode] = useState(() => randomCode());
+  const code = profile?.referral_code ?? fallbackCode;
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    if (typeof window !== "undefined") setOrigin(window.location.origin);
+  }, []);
+  const link = origin && code ? `${origin}/auth?ref=${code}` : "";
+  const total = (earnings ?? []).reduce((s: number, r: any) => s + Number(r?.amount ?? 0), 0);
+
+  const copy = async (value: string, label: string) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error("Could not copy — please copy manually");
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-3xl space-y-6">
