@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useAccountMode } from "@/lib/account-mode-context";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, ChartLine as LineChart, Store, ArrowDownToLine, ArrowUpFromLine, Clock, Activity, Users, Bot, Sparkles, Headphones, Megaphone, Mail, User, ChevronDown, Circle as HelpCircle, Gift, Play, ShoppingCart, SquareMinus as MinusSquare, Zap, Cpu, Layers, Bitcoin, Wallet } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";

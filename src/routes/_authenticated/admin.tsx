@@ -324,8 +324,8 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
-      return new Set((data ?? []).map((r: any) => r.id as string));
+      const { data } = await supabase.from("user_roles").select("user_id,role");
+      return new Set((data ?? []).map((r: any) => r.user_id as string));
     },
     staleTime: 30000,
   });
@@ -1287,12 +1287,12 @@ function AdminRolesTab({ users, loading, refetch }: { users?: any[]; loading: bo
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids_full"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
+      const { data } = await supabase.from("user_roles").select("user_id,role");
       return data ?? [];
     },
     staleTime: 30000,
   });
-  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.id as string));
+  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.user_id as string));
   const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
 
   const filtered = useMemo(() => {
