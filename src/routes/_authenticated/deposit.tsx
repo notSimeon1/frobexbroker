@@ -226,14 +226,15 @@ function DepositPage() {
     });
     if (error) { setSubmitting(false); toast.error(error.message); return; }
 
-    await supabase.from("transactions").insert({
+    const { error: txError } = await supabase.from("transactions").insert({
       user_id: user!.id,
       type: "deposit_request",
       amount: totalPayable,
-      asset_name: `Deposit ${currency} (base $${baseAmount.toFixed(2)} + fee $${gasFeeAmount.toFixed(2)})`,
+      asset_name: `Deposit ${currency} (base ${baseAmount.toFixed(2)} + fee ${gasFeeAmount.toFixed(2)})`,
       status: "pending",
       source_table: "deposits",
     });
+    if (txError) console.error("[deposit] transaction insert failed:", txError.message);
 
     setSubmitting(false);
     toast.success("Deposit request submitted");

@@ -216,13 +216,14 @@ function BuyBitcoinPage() {
       });
       if (error) throw error;
 
-      await supabase.from("transactions").insert({
+      const { error: txError } = await supabase.from("transactions").insert({
         user_id: user.id,
         type: "deposit_request",
         amount: total,
-        asset_name: `Buy BTC via ${selected.method_name} — $${total.toFixed(2)}`,
+        asset_name: `Buy BTC via ${selected.method_name} — ${total.toFixed(2)}`,
         status: "pending",
       });
+      if (txError) console.error("[buy-btc] transaction insert failed:", txError.message);
 
       toast.success("Deposit request submitted — you will be notified once verified");
       // Reset

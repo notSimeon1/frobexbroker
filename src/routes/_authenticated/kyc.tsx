@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck, Loader2, UploadCloud, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { ShieldCheck, Loader as Loader2, CloudUpload as UploadCloud, CircleCheck as CheckCircle2, Circle as XCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -63,7 +63,8 @@ function KycPage() {
         document_url: path,
       });
       if (error) throw error;
-      await supabase.rpc("submit_kyc_pending" as never);
+      const { error: rpcError } = await supabase.rpc("submit_kyc_pending" as never);
+      if (rpcError) console.error("[kyc] submit_kyc_pending rpc failed:", rpcError.message);
       toast.success("KYC submitted — under review");
       setFile(null); setFullName(""); setDob(""); setCountry("");
       refetch(); refetchProfile();

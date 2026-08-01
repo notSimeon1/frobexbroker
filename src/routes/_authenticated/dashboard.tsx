@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -163,7 +163,7 @@ function Dashboard() {
 function TickerRow({ sym, t, fav, toggleFav }: { sym: string; t?: Ticker; fav: boolean; toggleFav: () => void }) {
   const meta = SYMBOL_META[sym];
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  useMemo(() => {
+  useEffect(() => {
     if (!t) return;
     setFlash(t.direction === "up" ? "up" : t.direction === "down" ? "down" : null);
     const id = setTimeout(() => setFlash(null), 400);

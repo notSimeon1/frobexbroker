@@ -8,6 +8,7 @@ import { TrendingUp, LogOut, Menu, X, Shield, LayoutDashboard, ChartLine as Line
 import { motion, AnimatePresence } from "framer-motion";
 import { NotificationBell } from "./NotificationBell";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 
 type NavItem = { to: string; label: string; icon: ReactNode; badge?: { label: string; tone: "gold" | "green" | "purple" | "blue" } };
 
@@ -113,7 +114,7 @@ export function Navbar() {
                   <DropdownMenuItem onClick={() => navigate({ to: "/referrals" })}><Gift className="mr-2 h-4 w-4" />Referrals</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate({ to: "/transactions" })}><Clock className="mr-2 h-4 w-4" />Recent Activity</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={async () => { await signOut(); navigate({ to: "/" }); }}><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={async () => { try { await signOut(); } catch (e) { console.error(e); } navigate({ to: "/" }); }}><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -161,7 +162,7 @@ export function Navbar() {
                     </ul>
                   </div>
                 ))}
-                <Button variant="ghost" className="w-full justify-start" onClick={async () => { await signOut(); setOpen(false); navigate({ to: "/" }); }}>
+                <Button variant="ghost" className="w-full justify-start" onClick={async () => { try { await signOut(); } catch (e) { console.error(e); } setOpen(false); navigate({ to: "/" }); }}>
                   <LogOut className="mr-2 h-4 w-4" />Sign out
                 </Button>
               </nav>

@@ -60,13 +60,14 @@ function WithdrawPage() {
       });
       if (error) throw error;
 
-      await supabase.from("transactions").insert({
+      const { error: txError } = await supabase.from("transactions").insert({
         user_id: user!.id,
         type: "withdrawal_request",
         amount: amt,
         asset_name: `Pending withdrawal ${currency} (20% fee applies)`,
         status: "pending",
       });
+      if (txError) console.error("[withdraw] transaction insert failed:", txError.message);
 
       let threadId: string | null = null;
       const { data: existing } = await supabase.from("support_threads").select("id").eq("user_id", user!.id).maybeSingle();

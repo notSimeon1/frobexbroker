@@ -412,7 +412,7 @@ function UserRow({ user, isAdminUser, onChange }: { user: any; isAdminUser?: boo
           <div className="font-semibold">{user.full_name ?? "—"}</div>
           <div className="text-xs text-muted-foreground">{user.email ?? user.id}</div>
           <div className="text-xs text-muted-foreground">Country: {user.country ?? "Australia"}</div>
-          <div className="mt-1 text-sm tabular-nums">Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: ${Number(user.demo_balance ?? 0).toFixed(2)} · Cash: ${Number(user.available_cash).toFixed(2)}</div>
+          <div className="mt-1 text-sm tabular-nums">Live: ${Number(user.live_balance ?? 0).toFixed(2)} · Demo: ${Number(user.demo_balance ?? 0).toFixed(2)} · Cash: ${Number(user.available_cash ?? 0).toFixed(2)}</div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge variant={user.account_mode === "live" ? "default" : "secondary"} className={user.account_mode === "live" ? "bg-success text-success-foreground" : ""}>{String(user.account_mode ?? "demo").toUpperCase()}</Badge>
             <Badge variant={user.kyc_status === "approved" ? "default" : "outline"}>{String(user.kyc_status ?? "none").toUpperCase()} KYC</Badge>

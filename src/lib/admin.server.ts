@@ -109,14 +109,13 @@ export async function assertOwner(userId: string) {
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
   if (!error && data.user?.email?.toLowerCase() === OWNER_EMAIL) return;
 
-  // Also allow users granted admin role via user_roles table
-  const { data: roleRow } = await supabaseAdmin
-    .from("user_roles")
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
     .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin")
+    .eq("id", userId)
     .maybeSingle();
-  if (roleRow) return;
+  if (profileError) throw new Error(profileError.message);
+  if (profile?.role === "super_admin" || profile?.role === "admin") return;
 
   throw new Error("Admin access is restricted to authorized admin accounts");
 }
@@ -337,6 +336,7 @@ export async function adminGetKycDocumentUrl(userId: string, path: string) {
   await assertOwner(userId);
   const { data, error } = await supabaseAdmin.storage.from("kyc-documents").createSignedUrl(path, 60 * 10);
   if (error) throw new Error(error.message);
+  if (!data?.signedUrl) throw new Error("Failed to generate signed URL");
   return { url: data.signedUrl };
 }
 

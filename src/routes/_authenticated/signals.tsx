@@ -92,7 +92,7 @@ function Signals() {
                   </Badge>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <div><div className="text-muted-foreground">Entry</div><div className="font-bold">${t?.price.toFixed(2) ?? "—"}</div></div>
+                  <div><div className="text-muted-foreground">Entry</div><div className="font-bold">${t?.price != null ? t.price.toFixed(2) : "—"}</div></div>
                   <div><div className="text-muted-foreground">Target</div><div className="font-bold">${((t?.price ?? 0) * (bull ? 1.025 : 0.975)).toFixed(2)}</div></div>
                   <div><div className="text-muted-foreground">Stop</div><div className="font-bold">${((t?.price ?? 0) * (bull ? 0.985 : 1.015)).toFixed(2)}</div></div>
                 </div>
