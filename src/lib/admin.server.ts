@@ -109,13 +109,13 @@ export async function assertOwner(userId: string) {
   const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
   if (!error && data.user?.email?.toLowerCase() === OWNER_EMAIL) return;
 
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from("profiles")
+  // Roles live in public.user_roles (never on profiles) to avoid privilege escalation.
+  const { data: roles, error: rolesError } = await supabaseAdmin
+    .from("user_roles")
     .select("role")
-    .eq("id", userId)
-    .maybeSingle();
-  if (profileError) throw new Error(profileError.message);
-  if (profile?.role === "super_admin" || profile?.role === "admin") return;
+    .eq("user_id", userId);
+  if (rolesError) throw new Error(rolesError.message);
+  if ((roles ?? []).some((r) => r.role === "admin")) return;
 
   throw new Error("Admin access is restricted to authorized admin accounts");
 }
