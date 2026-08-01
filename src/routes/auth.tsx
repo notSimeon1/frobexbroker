@@ -46,6 +46,7 @@ function AuthPage() {
   const [country, setCountry] = useState("Australia");
   const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lastAttempt, setLastAttempt] = useState(0);
 
   const returnTo = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
 
@@ -58,6 +59,13 @@ function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy) return;
+    const now = Date.now();
+    if (now - lastAttempt < 3000) {
+      toast.error("Please wait a moment before trying again.");
+      return;
+    }
+    setLastAttempt(now);
     setBusy(true);
     try {
       const parsed = schema.safeParse({ email, password, fullName: tab === "signup" ? fullName : undefined });
