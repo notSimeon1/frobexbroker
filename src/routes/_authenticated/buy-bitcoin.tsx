@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Bitcoin, Copy, Loader as Loader2, ArrowLeft, CircleCheck as CheckCircle2, Upload, CloudUpload } from "lucide-react";
+import { useBinancePrices } from "@/hooks/useBinancePrices";
 
 export const Route = createFileRoute("/_authenticated/buy-bitcoin")({
   component: BuyBitcoinPage,
@@ -163,6 +164,10 @@ function BuyBitcoinPage() {
   const gas = +(base * GAS_FEE_PCT).toFixed(2);
   const total = +(base + gas).toFixed(2);
 
+  const { tickers } = useBinancePrices(["BTCUSDT"]);
+  const btcPrice = tickers["BTCUSDT"]?.price ?? 0;
+  const btcAmount = btcPrice > 0 ? total / btcPrice : 0;
+
   // When a method card is clicked → go to generating stage
   const pickMethod = (m: PaymentMethod) => {
     if (base < MIN_DEPOSIT) { toast.error(`Enter a minimum amount of $${MIN_DEPOSIT} first`); return; }
@@ -286,6 +291,15 @@ function BuyBitcoinPage() {
                   <span className="font-bold text-primary">${total.toFixed(2)} total</span>
                 </div>
               )}
+              {base > 0 && btcPrice > 0 && (
+                <div className="flex items-center justify-between rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-4 py-3">
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground"><Bitcoin className="h-4 w-4 text-yellow-500" />You will be getting</span>
+                  <span className="font-bold text-lg tabular-nums" style={{ color: "#d4a017" }}>{btcAmount.toFixed(7)} BTC</span>
+                </div>
+              )}
+              {base > 0 && btcPrice > 0 && (
+                <p className="text-[11px] text-muted-foreground">1 BTC = ${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })} · Rate updates every 30s</p>
+              )}
               <p className="text-xs text-muted-foreground">Minimum $50 · 3% network processing fee applies</p>
             </div>
 
@@ -396,6 +410,15 @@ function BuyBitcoinPage() {
                   </div>
                 )}
                 <InfoRow label="Amount to send" value={`${total.toFixed(2)} USD`} onCopy={copy} />
+                {btcPrice > 0 && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1"><Bitcoin className="h-3 w-3 text-yellow-500" />You will be getting</p>
+                      <p className="text-sm font-bold tabular-nums" style={{ color: "#d4a017" }}>{btcAmount.toFixed(7)} BTC</p>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground text-right">1 BTC = ${btcPrice.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+                  </div>
+                )}
               </div>
 
               {selected.memo_note && (

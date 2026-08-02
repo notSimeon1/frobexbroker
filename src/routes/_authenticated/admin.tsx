@@ -1206,14 +1206,21 @@ function AdminSupportTab() {
   useEffect(() => { loadThreads(); }, []);
 
   useEffect(() => {
+    const interval = setInterval(loadThreads, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     if (!activeId) { setMessages([]); return; }
     (async () => {
       const { data } = await supabase.from("support_messages").select("*").eq("thread_id", activeId).order("created_at");
       setMessages(data ?? []);
+      await supabase.from("support_messages").update({ is_read: true }).eq("thread_id", activeId).eq("sender", "user");
     })();
     const ch = supabase.channel("admin-support-" + activeId)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${activeId}` }, (p: any) => {
         setMessages((prev) => prev.some((x) => x.id === p.new.id) ? prev : [...prev, p.new]);
+        loadThreads();
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -1230,6 +1237,7 @@ function AdminSupportTab() {
       });
       if (error) throw error;
       setText("");
+      await loadThreads();
     } catch (e: any) {
       toast.error(e.message ?? "Failed to send");
     } finally { setSending(false); }
