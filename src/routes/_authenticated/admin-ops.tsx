@@ -556,9 +556,7 @@ function BotsTab() {
         win_rate: Number(val(b, "win_rate")),
         duration_days: Number(val(b, "duration_days")),
         hourly_payout: Number(val(b, "hourly_payout")) || 0,
-        daily_payout: Number(val(b, "daily_payout")) || 0,
-        status: String(val(b, "status")),
-        is_active: Boolean(draft[b.id]?.is_active ?? b.is_active),
+        status: (draft[b.id]?.is_active ?? b.is_active) === false ? "paused" : String(val(b, "status")),
         updated_at: new Date().toISOString(),
       }).eq("id", b.id);
       if (error) throw error;
