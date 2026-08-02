@@ -55,11 +55,10 @@ function AdminPage() {
     (async () => {
       try {
         const { data } = await supabase
-          .from("profiles")
+          .from("user_roles")
           .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (data?.role === "admin" || data?.role === "super_admin") {
+          .eq("user_id", user.id);
+        if ((data ?? []).some((r) => r.role === "admin")) {
           setIsAdmin(true);
           return;
         }

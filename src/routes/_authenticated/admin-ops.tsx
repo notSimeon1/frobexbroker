@@ -37,11 +37,10 @@ function AdminOpsPage() {
     (async () => {
       try {
         const { data } = await supabase
-          .from("profiles")
+          .from("user_roles")
           .select("role")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (data?.role === "super_admin" || data?.role === "admin") {
+          .eq("user_id", user.id);
+        if ((data ?? []).some((r) => r.role === "admin")) {
           setIsAdmin(true);
           return;
         }
@@ -399,7 +398,7 @@ function PaymentsTab() {
         identifier_label: String(val(m, "identifier_label")),
         identifier: String(val(m, "identifier")),
         recipient_name: String(val(m, "recipient_name")),
-        cash_app_link: m.method_key === "cash_app" ? String(val(m, "cash_app_link")) : null,
+        extra: m.method_key === "cash_app" ? { cash_app_link: String(val(m, "cash_app_link")) } : {},
         is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
         sort_order: Number(val(m, "sort_order")) || 0,
         updated_at: new Date().toISOString(),
@@ -557,9 +556,7 @@ function BotsTab() {
         win_rate: Number(val(b, "win_rate")),
         duration_days: Number(val(b, "duration_days")),
         hourly_payout: Number(val(b, "hourly_payout")) || 0,
-        daily_payout: Number(val(b, "daily_payout")) || 0,
-        status: String(val(b, "status")),
-        is_active: Boolean(draft[b.id]?.is_active ?? b.is_active),
+        status: (draft[b.id]?.is_active ?? b.is_active) === false ? "paused" : String(val(b, "status")),
         updated_at: new Date().toISOString(),
       }).eq("id", b.id);
       if (error) throw error;

@@ -24,9 +24,9 @@ export function Navbar() {
   useEffect(() => {
     if (!user) { setIsAdmin(false); return; }
     if (user.email?.toLowerCase() === OWNER_EMAIL) { setIsAdmin(true); return; }
-    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    supabase.from("user_roles").select("role").eq("user_id", user.id)
       .then(({ data }) => {
-        setIsAdmin(data?.role === "super_admin" || data?.role === "admin" || user.email?.toLowerCase() === OWNER_EMAIL);
+        setIsAdmin((data ?? []).some((r) => r.role === "admin") || user.email?.toLowerCase() === OWNER_EMAIL);
       });
   }, [user]);
 
