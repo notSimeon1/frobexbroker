@@ -55,10 +55,11 @@ function AdminPage() {
     (async () => {
       try {
         const { data } = await supabase
-          .from("user_roles")
+          .from("profiles")
           .select("role")
-          .eq("user_id", user.id);
-        if ((data ?? []).some((r: any) => r.role === "admin" || r.role === "super_admin")) {
+          .eq("id", user.id)
+          .maybeSingle();
+        if (data?.role === "admin" || data?.role === "super_admin") {
           setIsAdmin(true);
           return;
         }
@@ -323,8 +324,8 @@ function UsersTab({ users, loading, refetch }: { users?: any[]; loading: boolean
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("user_id,role");
-      return new Set((data ?? []).map((r: any) => r.user_id as string));
+      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
+      return new Set((data ?? []).map((r: any) => r.id as string));
     },
     staleTime: 30000,
   });
@@ -495,6 +496,7 @@ function KycTab({ items, users, loading, refetch }: { items?: any[]; users?: any
   const openDoc = async (path: string) => {
     try {
       const res = await getDocUrl({ data: { path } });
+      if (!res?.url) { toast.error("Could not generate document URL"); return; }
       window.open(res.url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
       toast.error(err.message ?? "Could not open document");
@@ -1186,14 +1188,18 @@ function AdminSupportTab() {
   const [sending, setSending] = useState(false);
 
   const loadThreads = async () => {
-    const { data } = await supabase.from("support_threads").select("*").order("last_message_at", { ascending: false, nullsFirst: false });
-    setThreads(data ?? []);
-    const ids = Array.from(new Set((data ?? []).map((t: any) => t.user_id)));
-    if (ids.length) {
-      const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", ids);
-      const map: Record<string, any> = {};
-      (profs ?? []).forEach((p: any) => { map[p.id] = p; });
-      setUsers(map);
+    try {
+      const { data } = await supabase.from("support_threads").select("*").order("last_message_at", { ascending: false, nullsFirst: false });
+      setThreads(data ?? []);
+      const ids = Array.from(new Set((data ?? []).map((t: any) => t.user_id)));
+      if (ids.length) {
+        const { data: profs } = await supabase.from("profiles").select("id,full_name").in("id", ids);
+        const map: Record<string, any> = {};
+        (profs ?? []).forEach((p: any) => { map[p.id] = p; });
+        setUsers(map);
+      }
+    } catch (e) {
+      console.error("[admin] loadThreads failed", e);
     }
   };
 
@@ -1286,12 +1292,12 @@ function AdminRolesTab({ users, loading, refetch }: { users?: any[]; loading: bo
   const rolesQuery = useQuery({
     queryKey: ["admin_role_ids_full"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_roles").select("user_id,role");
+      const { data } = await supabase.from("profiles").select("id,role").in("role", ["admin", "super_admin"]);
       return data ?? [];
     },
     staleTime: 30000,
   });
-  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.user_id as string));
+  const adminSet = new Set((rolesQuery.data ?? []).map((r: any) => r.id as string));
   const reload = async () => { await Promise.all([refetch(), rolesQuery.refetch()]); };
 
   const filtered = useMemo(() => {

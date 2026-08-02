@@ -30,12 +30,13 @@ type PaymentMethod = {
   recipient_name: string;
   identifier: string;
   memo_note?: string;
+  cash_app_link?: string;
   is_active: boolean;
 };
 
 // Fallback methods shown when DB is empty / not yet configured
 const FALLBACK_METHODS: PaymentMethod[] = [
-  { id: "cashapp",  method_key: "cashapp",  method_name: "Cash App",  identifier_label: "$Cashtag",    recipient_name: "Frobex Treasury", identifier: "$FrobexTreasury",     is_active: true },
+  { id: "cashapp",  method_key: "cash_app",  method_name: "Cash App",  identifier_label: "$Cashtag",    recipient_name: "Frobex Treasury", identifier: "$FrobexTreasury",     is_active: true },
   { id: "paypal",   method_key: "paypal",   method_name: "PayPal",    identifier_label: "Email",       recipient_name: "Frobex Treasury", identifier: "deposits@frobex.io",  is_active: true },
   { id: "zelle",    method_key: "zelle",    method_name: "Zelle",     identifier_label: "Phone/Email", recipient_name: "Frobex Treasury", identifier: "deposits@frobex.io",  is_active: true },
   { id: "chime",    method_key: "chime",    method_name: "Chime",     identifier_label: "Handle",      recipient_name: "Frobex Treasury", identifier: "@frobexdeposits",     is_active: true },
@@ -388,7 +389,13 @@ function BuyBitcoinPage() {
                 <InfoRow label="Payment method" value={selected.method_name} onCopy={copy} />
                 <InfoRow label="Recipient name" value={selected.recipient_name} onCopy={copy} />
                 <InfoRow label={selected.identifier_label} value={selected.identifier} onCopy={copy} />
-                <InfoRow label="Amount to send" value={`$${total.toFixed(2)} USD`} onCopy={copy} />
+                {selected.cash_app_link && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">Cash App Link</span>
+                    <a href={selected.cash_app_link} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">Open Cash App</a>
+                  </div>
+                )}
+                <InfoRow label="Amount to send" value={`${total.toFixed(2)} USD`} onCopy={copy} />
               </div>
 
               {selected.memo_note && (

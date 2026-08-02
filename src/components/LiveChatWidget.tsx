@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, X, Send, Paperclip, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Paperclip, Loader as Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
@@ -55,24 +55,27 @@ export function LiveChatWidget() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      let { data: thread } = await supabase.from("support_threads").select("*").eq("user_id", user.id).maybeSingle();
-      if (!thread) {
-        const res = await supabase.from("support_threads").insert({ user_id: user.id, subject: "Customer Support" }).select().maybeSingle();
-        thread = res.data as any;
-        if (thread) {
-          // Auto welcome
-          const first = user.user_metadata?.full_name?.split(" ")[0] || "there";
-          await supabase.from("support_messages").insert({
-            thread_id: thread.id, user_id: user.id, sender: "bot",
-            body: `Hello ${first}! Welcome to Frobex Support. How can we assist you with your trading account or deposits today?`,
-          });
+      try {
+        let { data: thread } = await supabase.from("support_threads").select("*").eq("user_id", user.id).maybeSingle();
+        if (!thread) {
+          const res = await supabase.from("support_threads").insert({ user_id: user.id, subject: "Customer Support" }).select().maybeSingle();
+          thread = res.data as any;
+          if (thread) {
+            const first = user.user_metadata?.full_name?.split(" ")[0] || "there";
+            await supabase.from("support_messages").insert({
+              thread_id: thread.id, user_id: user.id, sender: "bot",
+              body: `Hello ${first}! Welcome to Frobex Support. How can we assist you with your trading account or deposits today?`,
+            });
+          }
         }
+        if (!thread) return;
+        setThreadId(thread.id);
+        const { data: msgs } = await supabase.from("support_messages").select("*").eq("thread_id", thread.id).order("created_at");
+        setMessages((msgs as Msg[]) ?? []);
+        setUnread(((msgs as Msg[]) ?? []).filter((m) => m.sender !== "user" && !m.is_read).length);
+      } catch (e) {
+        console.error("[chat] failed to load thread/messages", e);
       }
-      if (!thread) return;
-      setThreadId(thread.id);
-      const { data: msgs } = await supabase.from("support_messages").select("*").eq("thread_id", thread.id).order("created_at");
-      setMessages((msgs as Msg[]) ?? []);
-      setUnread(((msgs as Msg[]) ?? []).filter((m) => m.sender !== "user" && !m.is_read).length);
     })();
   }, [user?.id]);
 
@@ -94,22 +97,30 @@ export function LiveChatWidget() {
 
   const send = async (body: string) => {
     if (!body.trim() || !user || !threadId) return;
+    const trimmed = body.trim();
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: Msg = { id: tempId, thread_id: threadId, user_id: user.id, sender: "user", body: trimmed, created_at: new Date().toISOString(), is_read: true };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setText("");
     setSending(true);
     try {
-      const { error } = await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: body.trim() });
+      const { error } = await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: trimmed });
       if (error) throw error;
-      setText("");
-    } catch (e: any) { toast.error(e.message ?? "Could not send"); }
-    finally { setSending(false); }
+    } catch (e: any) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      toast.error(e.message ?? "Could not send");
+    } finally { setSending(false); }
   };
 
   const upload = async (file: File) => {
     if (!user || !threadId) return;
     const path = `${user.id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("support-attachments").upload(path, file);
-    if (error) { toast.error(error.message); return; }
-    const { data } = await supabase.storage.from("support-attachments").createSignedUrl(path, 60 * 60 * 24);
-    await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: `📎 ${file.name}`, attachment_url: data?.signedUrl });
+    const { error: upErr } = await supabase.storage.from("support_attachments").upload(path, file);
+    if (upErr) { toast.error(upErr.message); return; }
+    const { data, error: urlErr } = await supabase.storage.from("support_attachments").createSignedUrl(path, 60 * 60 * 24);
+    if (urlErr || !data?.signedUrl) { toast.error("Could not generate file link"); return; }
+    const { error: msgErr } = await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: `📎 ${file.name}`, attachment_url: data.signedUrl });
+    if (msgErr) toast.error(msgErr.message);
   };
 
   // Pointer handlers for dragging the floating button

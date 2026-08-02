@@ -131,7 +131,7 @@ function CopyTierCard({ tier, balance, index }: { tier: any; balance: number; in
     }
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("activate_copy_trading" as never, {
+      const { error } = await supabase.rpc("subscribe_copy_trader" as never, {
         _tier_id: tier.id,
         _allocated_amount: usd,
       } as never);

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
-import { Send, Paperclip, Loader2 } from "lucide-react";
+import { Send, Paperclip, Loader as Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/support")({
@@ -78,10 +78,12 @@ function SupportPage() {
   const upload = async (file: File) => {
     if (!user || !threadId) return;
     const path = `${user.id}/${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from("support-attachments").upload(path, file);
-    if (error) { toast.error(error.message); return; }
-    const { data } = await supabase.storage.from("support-attachments").createSignedUrl(path, 60 * 60 * 24);
-    await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: `📎 ${file.name}`, attachment_url: data?.signedUrl });
+    const { error: upErr } = await supabase.storage.from("support_attachments").upload(path, file);
+    if (upErr) { toast.error(upErr.message); return; }
+    const { data, error: urlErr } = await supabase.storage.from("support_attachments").createSignedUrl(path, 60 * 60 * 24);
+    if (urlErr || !data?.signedUrl) { toast.error("Could not generate file link"); return; }
+    const { error: msgErr } = await supabase.from("support_messages").insert({ thread_id: threadId, user_id: user.id, sender: "user", body: `📎 ${file.name}`, attachment_url: data.signedUrl });
+    if (msgErr) toast.error(msgErr.message);
   };
 
   return (
