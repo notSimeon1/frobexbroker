@@ -398,7 +398,7 @@ function PaymentsTab() {
         identifier_label: String(val(m, "identifier_label")),
         identifier: String(val(m, "identifier")),
         recipient_name: String(val(m, "recipient_name")),
-        cash_app_link: m.method_key === "cash_app" ? String(val(m, "cash_app_link")) : null,
+        extra: m.method_key === "cash_app" ? { cash_app_link: String(val(m, "cash_app_link")) } : {},
         is_active: Boolean(draft[m.method_key]?.is_active ?? m.is_active),
         sort_order: Number(val(m, "sort_order")) || 0,
         updated_at: new Date().toISOString(),
